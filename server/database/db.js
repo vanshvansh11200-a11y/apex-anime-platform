@@ -368,6 +368,7 @@ class Database {
       id: this.generateId('ep'),
       anime_id: animeId,
       episode_number: parseFloat(epData.episode_number) || 1,
+      season_number: parseInt(epData.season_number, 10) || 1,
       title: epData.title || `Episode ${epData.episode_number}`,
       thumbnail_url: epData.thumbnail_url || (anime ? anime.banner_url : ''),
       duration: epData.duration || '24:00',

@@ -16,15 +16,41 @@ function renderEpisodeList(episodes, resumeEpisode, animeSlug, isMovie = false) 
     return `<p class="text-gray-400 text-sm py-4 text-center">${isMovie ? 'No movie stream link available yet.' : 'No episodes available yet.'}</p>`;
   }
 
+  // Group episodes by Season (Season 1, Season 2, etc.)
+  const seasonsMap = new Map();
+  episodes.forEach(ep => {
+    let sNum = ep.season_number || ep.season || 1;
+    if (typeof sNum === 'string') sNum = parseInt(sNum, 10) || 1;
+    if (!seasonsMap.has(sNum)) seasonsMap.set(sNum, []);
+    seasonsMap.get(sNum).push(ep);
+  });
+
+  const seasonKeys = Array.from(seasonsMap.keys()).sort((a, b) => a - b);
+  const hasMultipleSeasons = seasonKeys.length > 1;
+  const initialSeason = seasonKeys[0];
+
   return `
+    ${hasMultipleSeasons ? `
+      <!-- Multi-Season Selector Tabs -->
+      <div class="flex items-center gap-2 mb-3.5 overflow-x-auto pb-1" id="season-selector-tabs">
+        ${seasonKeys.map((s, idx) => `
+          <button class="season-tab-btn flex-shrink-0 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${idx === 0 ? 'bg-apex-pink text-white shadow-lg shadow-pink-500/20' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'}" data-season="${s}">
+            Season ${s} <span class="ml-1 opacity-75 text-[10px]">(${seasonsMap.get(s).length})</span>
+          </button>
+        `).join('')}
+      </div>
+    ` : ''}
+
     <div class="space-y-2 max-h-[480px] overflow-y-auto pr-1" id="episode-list">
       ${episodes.map(ep => {
+        const epSeason = ep.season_number || ep.season || 1;
         const isResume = resumeEpisode && resumeEpisode.episode_id === ep.id;
         const pct = isResume && resumeEpisode.total_seconds > 0
           ? Math.round((resumeEpisode.progress_seconds / resumeEpisode.total_seconds) * 100)
           : 0;
+        const isHidden = hasMultipleSeasons && epSeason !== initialSeason;
         return `
-          <a href="#/watch/${ep.id}" class="group flex items-start gap-3 p-3 rounded-xl border border-[var(--border-color)] hover:border-apex-pink/40 hover:bg-white/3 transition-all bg-[var(--bg-secondary)]">
+          <a href="#/watch/${ep.id}" class="episode-list-item group flex items-start gap-3 p-3 rounded-xl border border-[var(--border-color)] hover:border-apex-pink/40 hover:bg-white/3 transition-all bg-[var(--bg-secondary)]" data-season="${epSeason}" style="${isHidden ? 'display: none;' : ''}">
             <div class="relative w-28 flex-shrink-0 rounded-lg overflow-hidden aspect-video bg-black">
               <img src="${ep.thumbnail_url || ''}" alt="${ep.title || 'Stream'}" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1534447677768-be436bb09401?w=400'" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
               ${isResume ? `
@@ -39,7 +65,7 @@ function renderEpisodeList(episodes, resumeEpisode, animeSlug, isMovie = false) 
             <div class="flex-grow min-w-0">
               <div class="flex items-center gap-2 mb-0.5">
                 <span class="text-xs font-mono font-bold ${isMovie ? 'text-purple-400' : 'text-apex-pink'}">
-                  ${isMovie ? '🎬 FULL MOVIE' : `EP ${ep.episode_number}`}
+                  ${isMovie ? '🎬 FULL MOVIE' : (hasMultipleSeasons ? `S${epSeason} • EP ${ep.episode_number}` : `EP ${ep.episode_number}`)}
                 </span>
                 ${isResume ? `<span class="text-[10px] font-bold bg-apex-pink/20 text-apex-pink px-1.5 rounded">RESUME</span>` : ''}
               </div>
@@ -231,6 +257,27 @@ export async function renderAnimeDetail(app, slug) {
 
     if (window.lucide) window.lucide.createIcons();
 
+    // Multi-Season Tab Toggle Logic
+    const seasonTabs = app.querySelectorAll('.season-tab-btn');
+    if (seasonTabs.length > 0) {
+      seasonTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          const targetSeason = tab.dataset.season;
+          seasonTabs.forEach(t => {
+            t.classList.remove('bg-apex-pink', 'text-white', 'shadow-lg', 'shadow-pink-500/20');
+            t.classList.add('bg-white/5', 'text-gray-400');
+          });
+          tab.classList.add('bg-apex-pink', 'text-white', 'shadow-lg', 'shadow-pink-500/20');
+          tab.classList.remove('bg-white/5', 'text-gray-400');
+
+          const items = app.querySelectorAll('.episode-list-item');
+          items.forEach(item => {
+            item.style.display = (item.dataset.season === targetSeason) ? 'flex' : 'none';
+          });
+        });
+      });
+    }
+
     // Watchlist Dropdown Logic
     const watchlistBtn = document.getElementById('watchlist-btn');
     const watchlistMenu = document.getElementById('watchlist-menu');
@@ -298,5 +345,26 @@ export async function renderAnimeDetail(app, slug) {
       </div>
     `;
     if (window.lucide) window.lucide.createIcons();
+
+    // Multi-Season Tab Toggle Logic
+    const seasonTabs = app.querySelectorAll('.season-tab-btn');
+    if (seasonTabs.length > 0) {
+      seasonTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          const targetSeason = tab.dataset.season;
+          seasonTabs.forEach(t => {
+            t.classList.remove('bg-apex-pink', 'text-white', 'shadow-lg', 'shadow-pink-500/20');
+            t.classList.add('bg-white/5', 'text-gray-400');
+          });
+          tab.classList.add('bg-apex-pink', 'text-white', 'shadow-lg', 'shadow-pink-500/20');
+          tab.classList.remove('bg-white/5', 'text-gray-400');
+
+          const items = app.querySelectorAll('.episode-list-item');
+          items.forEach(item => {
+            item.style.display = (item.dataset.season === targetSeason) ? 'flex' : 'none';
+          });
+        });
+      });
+    }
   }
 }

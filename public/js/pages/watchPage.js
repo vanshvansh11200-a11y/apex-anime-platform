@@ -729,6 +729,17 @@ export async function renderWatchPage(app, episodeId) {
 
     document.title = `${anime?.title || ''} EP ${episode.episode_number} — APEX`;
 
+    // Multi-Season Grouping for Watch Page Sidebar
+    const currentEpSeason = episode.season_number || episode.season || 1;
+    const watchSeasonsMap = new Map();
+    (allEpisodes || []).forEach(ep => {
+      let s = ep.season_number || ep.season || 1;
+      if (typeof s === 'string') s = parseInt(s, 10) || 1;
+      if (!watchSeasonsMap.has(s)) watchSeasonsMap.set(s, []);
+      watchSeasonsMap.get(s).push(ep);
+    });
+    const watchSeasonKeys = Array.from(watchSeasonsMap.keys()).sort((a, b) => a - b);
+
     app.innerHTML = `
       <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6">
         <div class="grid grid-cols-1 xl:grid-cols-4 gap-6">
@@ -792,22 +803,40 @@ export async function renderWatchPage(app, episodeId) {
             <div id="comments-section"></div>
           </div>
 
-          <!-- Sidebar: Episode List -->
+          <!-- Sidebar: Episode List with Season Selector -->
           <div class="xl:col-span-1">
             <div class="glass-panel rounded-xl p-4 sticky top-20">
-              <h3 class="text-sm font-bold uppercase tracking-wider text-gray-400 mb-4">Episodes <span class="text-apex-pink">${allEpisodes?.length || 0}</span></h3>
-              <div class="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
-                ${(allEpisodes || []).map(ep => `
-                  <a href="#/watch/${ep.id}" class="flex items-center gap-2 p-2.5 rounded-lg border ${ep.id === episode.id ? 'border-apex-pink/50 bg-apex-pink/10' : 'border-transparent hover:border-white/10 hover:bg-white/3'} transition-all group">
-                    <div class="w-16 flex-shrink-0 rounded overflow-hidden aspect-video bg-black">
-                      <img src="${ep.thumbnail_url || ''}" onerror="this.src='https://images.unsplash.com/photo-1534447677768-be436bb09401?w=200'" class="w-full h-full object-cover" loading="lazy">
-                    </div>
-                    <div class="flex-grow min-w-0">
-                      <span class="text-[11px] font-mono font-bold ${ep.id === episode.id ? 'text-apex-pink' : 'text-gray-500'}">EP ${ep.episode_number}</span>
-                      <p class="text-xs font-semibold text-white truncate">${ep.title}</p>
-                    </div>
-                  </a>
-                `).join('')}
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-bold uppercase tracking-wider text-gray-400">Episodes <span class="text-apex-pink">${allEpisodes?.length || 0}</span></h3>
+              </div>
+
+              ${watchSeasonKeys.length > 1 ? `
+                <!-- Watch Page Season Tabs -->
+                <div class="flex items-center gap-1.5 mb-3.5 overflow-x-auto pb-1" id="watch-season-tabs">
+                  ${watchSeasonKeys.map(s => `
+                    <button class="watch-season-btn flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${s === currentEpSeason ? 'bg-apex-pink text-white shadow-md shadow-pink-500/20' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'}" data-season="${s}">
+                      Season ${s}
+                    </button>
+                  `).join('')}
+                </div>
+              ` : ''}
+
+              <div class="space-y-2 max-h-[65vh] overflow-y-auto pr-1" id="watch-episode-list">
+                ${(allEpisodes || []).map(ep => {
+                  const sNum = ep.season_number || ep.season || 1;
+                  const isHidden = watchSeasonKeys.length > 1 && sNum !== currentEpSeason;
+                  return `
+                    <a href="#/watch/${ep.id}" class="watch-episode-item flex items-center gap-2 p-2.5 rounded-lg border ${ep.id === episode.id ? 'border-apex-pink/50 bg-apex-pink/10' : 'border-transparent hover:border-white/10 hover:bg-white/3'} transition-all group" data-season="${sNum}" style="${isHidden ? 'display: none;' : ''}">
+                      <div class="w-16 flex-shrink-0 rounded overflow-hidden aspect-video bg-black">
+                        <img src="${ep.thumbnail_url || ''}" onerror="this.src='https://images.unsplash.com/photo-1534447677768-be436bb09401?w=200'" class="w-full h-full object-cover" loading="lazy">
+                      </div>
+                      <div class="flex-grow min-w-0">
+                        <span class="text-[11px] font-mono font-bold ${ep.id === episode.id ? 'text-apex-pink' : 'text-gray-500'}">${watchSeasonKeys.length > 1 ? `S${sNum} • ` : ''}EP ${ep.episode_number}</span>
+                        <p class="text-xs font-semibold text-white truncate">${ep.title}</p>
+                      </div>
+                    </a>
+                  `;
+                }).join('')}
               </div>
             </div>
           </div>
@@ -816,6 +845,26 @@ export async function renderWatchPage(app, episodeId) {
     `;
 
     if (window.lucide) window.lucide.createIcons();
+
+    // Watch Page Season Switching Logic
+    const watchSeasonBtns = app.querySelectorAll('.watch-season-btn');
+    if (watchSeasonBtns.length > 0) {
+      watchSeasonBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const s = parseInt(btn.dataset.season, 10);
+          watchSeasonBtns.forEach(b => {
+            b.classList.remove('bg-apex-pink', 'text-white', 'shadow-md', 'shadow-pink-500/20');
+            b.classList.add('bg-white/5', 'text-gray-400');
+          });
+          btn.classList.add('bg-apex-pink', 'text-white', 'shadow-md', 'shadow-pink-500/20');
+          btn.classList.remove('bg-white/5', 'text-gray-400');
+
+          app.querySelectorAll('.watch-episode-item').forEach(item => {
+            item.style.display = (parseInt(item.dataset.season, 10) === s) ? 'flex' : 'none';
+          });
+        });
+      });
+    }
 
     // Mount player
     const playerMount = document.getElementById('player-mount');

@@ -132,13 +132,12 @@ async function startServer() {
 =====================================================
       `);
 
-      // Initialize Telegram Bot if token exists
-      const botToken = process.env.TELEGRAM_BOT_TOKEN || db.data.settings?.telegramBotToken;
-      if (botToken && botToken.includes(':')) {
-        console.log('[APEX] Starting background Telegram Bot...');
-        await telegramBotService.start(botToken);
-      } else {
-        console.log('[APEX] 🤖 Telegram Bot: Configurable in Admin Panel or via TELEGRAM_BOT_TOKEN in .env');
+      // Note: Standalone Telegram AI Bot is managed separately in ~/telegram-ai-bot (alias 'bot')
+      if (process.env.RUN_BOT_ON_SERVER === 'true') {
+        const botToken = process.env.TELEGRAM_BOT_TOKEN || db.data.settings?.telegramBotToken;
+        if (botToken && botToken.includes(':')) {
+          await telegramBotService.start(botToken);
+        }
       }
     });
 

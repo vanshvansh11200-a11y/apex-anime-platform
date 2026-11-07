@@ -272,12 +272,14 @@ async function quickPublish(req, res, next) {
       audioLabel
     };
 
+    const targetSeason = parseInt(req.body.season_number, 10) || 1;
     let existingEpisodes = db.getEpisodesByAnimeId(anime.id);
-    let episode = existingEpisodes.find(e => e.episode_number === epNum);
+    let episode = existingEpisodes.find(e => e.episode_number === epNum && (e.season_number || 1) === targetSeason);
 
     if (episode) {
       const sources = [newSource, ...(episode.sources || []).filter(s => s.server !== newSource.server)];
       episode = db.updateEpisode(episode.id, {
+        season_number: targetSeason,
         title: epTitle,
         video_url: finalUrl,
         sources,
@@ -286,6 +288,7 @@ async function quickPublish(req, res, next) {
     } else {
       episode = db.createEpisode({
         anime_id: anime.id,
+        season_number: targetSeason,
         episode_number: epNum,
         title: epTitle,
         thumbnail_url: (aiData && aiData.episode_thumbnail) || anime.banner_url || anime.poster_url,

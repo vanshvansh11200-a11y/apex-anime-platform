@@ -55,9 +55,15 @@ export function parseAnimeFilename(filename, isMovie = false) {
     };
   }
 
-  // Series Mode: Extract Episode Number
+  // Series Mode: Extract Season & Episode Number
   let episodeNumber = 1;
+  let seasonNumber = 1;
   let epMatch = null;
+
+  const sMatch = clean.match(/\bs(\d+)[.\s_-]*e\d+/i) || clean.match(/(?:season|s)[.\s_-]*(\d+)/i);
+  if (sMatch) {
+    seasonNumber = parseInt(sMatch[1], 10) || 1;
+  }
 
   // Pattern 1: Ep / Episode / E followed by numbers: "Episode 05", "EP 10", "E01"
   epMatch = clean.match(/(?:ep|episode|eps)[.\s_-]*(\d+)/i);
@@ -101,6 +107,7 @@ export function parseAnimeFilename(filename, isMovie = false) {
 
   return {
     animeTitle,
+    seasonNumber,
     episodeNumber,
     episodeTitle: `Episode ${episodeNumber}`,
     audio,
@@ -685,6 +692,7 @@ export function renderBatchUploadSection(container, onCompleted) {
           title: currentTitle,
           content_type: isMov ? 'movie' : 'series',
           type: isMov ? 'Movie' : 'TV',
+          season_number: item.seasonNumber || 1,
           episode_number: isMov ? 1 : item.episodeNumber,
           episode_title: isMov ? (item.episodeTitle || `${currentTitle} (Full Movie)`) : item.episodeTitle,
           stream_url: uploadRes.url,
