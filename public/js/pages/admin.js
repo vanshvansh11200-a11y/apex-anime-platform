@@ -279,19 +279,24 @@ function renderEpisodeForm(animeId = '', existingEp = null) {
   return `
     <form id="episode-form" class="space-y-4">
       <input type="hidden" name="anime_id" value="${animeId}" />
-      <div class="grid grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-1.5">Season Number *</label>
+          <input type="number" name="season_number" id="edit-ep-season" value="${ep.season_number || 1}" min="1" step="1" required class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-apex-pink text-white font-mono text-center" />
+        </div>
         <div>
           <label class="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-1.5">Episode Number *</label>
-          <input type="number" name="episode_number" id="edit-ep-num" value="${ep.episode_number || 1}" min="0" step="0.5" required class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink text-white font-mono" />
+          <input type="number" name="episode_number" id="edit-ep-num" value="${ep.episode_number || 1}" min="0" step="0.5" required class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-apex-pink text-white font-mono text-center" />
         </div>
         <div>
           <label class="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-1.5">Duration (mm:ss)</label>
-          <input type="text" name="duration" id="edit-ep-duration" value="${ep.duration || '24:00'}" placeholder="24:00" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink text-white" />
+          <input type="text" name="duration" id="edit-ep-duration" value="${ep.duration || '24:00'}" placeholder="24:00" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-apex-pink text-white" />
         </div>
-        <div class="col-span-2">
-          <label class="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-1.5">Episode Title</label>
-          <input type="text" name="title" id="edit-ep-title" value="${ep.title || ''}" placeholder="e.g. Enter Naruto Uzumaki!" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink text-white" />
-        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-1.5">Episode Title</label>
+        <input type="text" name="title" id="edit-ep-title" value="${ep.title || ''}" placeholder="e.g. Enter Naruto Uzumaki!" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink text-white" />
+      </div>
 
         <!-- Video Stream URL with Paste & Upload -->
         <div class="col-span-2">
@@ -430,14 +435,18 @@ function renderQuickTelegramModal(animeList = [], prefillTitle = '', prefillEpis
 
       <!-- Series Episode Row (Hidden for Movies) -->
       <div id="qs-series-section" class="${isSeries ? '' : 'hidden'} space-y-4">
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-3 gap-3">
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-1.5">Episode Number *</label>
-            <input type="number" name="episode_number" id="qs-ep-num" value="${prefillEpisode || 1}" min="1" step="0.5" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink text-white font-mono" />
+            <label class="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-1.5">Season *</label>
+            <input type="number" name="season_number" id="qs-season-num" value="1" min="1" step="1" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-2.5 py-2.5 text-sm focus:outline-none focus:border-apex-pink text-white font-mono text-center" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-1.5">Episode No. *</label>
+            <input type="number" name="episode_number" id="qs-ep-num" value="${prefillEpisode || 1}" min="1" step="0.5" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-2.5 py-2.5 text-sm focus:outline-none focus:border-apex-pink text-white font-mono text-center" />
           </div>
           <div>
             <label class="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-1.5">Audio Track</label>
-            <select name="audio" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-apex-pink text-white cursor-pointer">
+            <select name="audio" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-2 py-2.5 text-sm focus:outline-none focus:border-apex-pink text-white cursor-pointer">
               <option value="hi" selected>Hindi Dub</option>
               <option value="ja">Japanese (Original)</option>
               <option value="en">English Dub</option>
@@ -1136,8 +1145,8 @@ export async function renderAdminDashboard(app) {
                 listDiv.innerHTML = episodes.map(ep => `
                   <div class="flex items-center justify-between p-2.5 rounded-lg bg-white/5 hover:bg-white/8 transition-colors border border-white/5 gap-3">
                     <div class="flex items-center gap-3 min-w-0 flex-grow">
-                      <span class="w-8 h-8 rounded-md bg-white/10 flex items-center justify-center font-mono font-bold text-xs text-apex-pink flex-shrink-0">
-                        ${ep.episode_number}
+                      <span class="w-14 h-8 rounded-md bg-white/10 flex items-center justify-center font-mono font-bold text-xs text-apex-pink flex-shrink-0">
+                        ${(ep.season_number && ep.season_number > 1) ? `S${ep.season_number}E` : 'EP'}${ep.episode_number}
                       </span>
                       <div class="min-w-0 flex-grow">
                         <p class="text-xs font-bold text-white truncate">${ep.title || `Episode ${ep.episode_number}`}</p>
@@ -1172,6 +1181,7 @@ export async function renderAdminDashboard(app) {
                       const form = document.getElementById('episode-form');
                       if (!form) return;
 
+                      const seasonNum = parseInt(form.querySelector('[name="season_number"]')?.value, 10) || ep.season_number || 1;
                       const epNum = parseFloat(form.querySelector('[name="episode_number"]')?.value) || ep.episode_number;
                       const title = form.querySelector('[name="title"]')?.value.trim() || `Episode ${epNum}`;
                       const videoUrl = form.querySelector('[name="video_url"]')?.value.trim() || ep.video_url;
@@ -1204,6 +1214,7 @@ export async function renderAdminDashboard(app) {
 
                       try {
                         await api.updateEpisode(ep.id, {
+                          season_number: seasonNum,
                           episode_number: epNum,
                           title,
                           duration,

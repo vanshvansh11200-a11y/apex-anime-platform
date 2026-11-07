@@ -60,23 +60,29 @@ export function parseAnimeFilename(filename, isMovie = false) {
   let seasonNumber = 1;
   let epMatch = null;
 
-  const sMatch = clean.match(/\bs(\d+)[.\s_-]*e\d+/i) || clean.match(/(?:season|s)[.\s_-]*(\d+)/i);
-  if (sMatch) {
+  // 1. Detect Season: S01, S1, S2, Season 2, Sesion 3, etc.
+  let sMatch = clean.match(/\bs(\d{1,2})[.\s_-]*(?:e|ep|episode|\b)/i);
+  if (!sMatch) {
+    sMatch = clean.match(/\b(?:season|sesion|s)[.\s_-]*(\d{1,2})\b/i);
+  }
+  if (!sMatch) {
+    if (/\b2nd\s*season\b/i.test(clean)) seasonNumber = 2;
+    else if (/\b3rd\s*season\b/i.test(clean)) seasonNumber = 3;
+    else if (/\b4th\s*season\b/i.test(clean)) seasonNumber = 4;
+    else if (/\b5th\s*season\b/i.test(clean)) seasonNumber = 5;
+  } else {
     seasonNumber = parseInt(sMatch[1], 10) || 1;
   }
 
-  // Pattern 1: Ep / Episode / E followed by numbers: "Episode 05", "EP 10", "E01"
+  // 2. Detect Episode Number
   epMatch = clean.match(/(?:ep|episode|eps)[.\s_-]*(\d+)/i);
   if (!epMatch) {
-    // Pattern 2: S01E05
     epMatch = clean.match(/s\d+[.\s_-]*e(\d+)/i);
   }
   if (!epMatch) {
-    // Pattern 3: Separator with number: " - 05 ", " - 10"
     epMatch = clean.match(/(?:^|[\s–-])(\d{1,4})(?:v\d)?(?:[\s–-]|$)/);
   }
   if (!epMatch) {
-    // Pattern 4: Fallback any stand-alone number
     epMatch = clean.match(/\b(\d+)\b/);
   }
 
@@ -84,13 +90,16 @@ export function parseAnimeFilename(filename, isMovie = false) {
     episodeNumber = parseInt(epMatch[1], 10) || 1;
   }
 
-  // Extract Anime Title: text before the episode number
+  // 3. Extract Anime Title: text before the episode/season tag
   let animeTitle = clean;
   if (epMatch && epMatch.index !== undefined) {
     animeTitle = clean.slice(0, epMatch.index).trim();
   }
 
+  // Strip season tag from parent title so all seasons (S1, S2, S3, S4) group under the main anime
   animeTitle = animeTitle
+    .replace(/\b(?:season|sesion|s)[.\s_-]*\d+\b/gi, '')
+    .replace(/\b(?:2nd|3rd|4th|5th)\s*season\b/gi, '')
     .replace(/[-–_]+$/, '')
     .replace(/^[-–_]+/, '')
     .trim();
@@ -132,6 +141,7 @@ export function renderBatchUploadSection(container, onCompleted) {
   let aiMetadata = null;
   let isUploading = false;
   let activeMode = 'series'; // 'series' or 'movie'
+  let activeSeasonFilter = 'all'; // 'all' or season number (1, 2, 3...)
 
   container.innerHTML = `
     <div class="space-y-6">
@@ -285,6 +295,34 @@ export function renderBatchUploadSection(container, onCompleted) {
             </div>
           </div>
 
+          <!-- Multi-Season Controls Bar (Season isolation & bulk assignment) -->
+          <div id="batch-season-controls" class="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/10">
+            <!-- Season Filter Tabs -->
+            <div class="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full" id="batch-season-tabs">
+              <!-- Dynamically populated: [All (24)] [Season 1 (12)] [Season 2 (12)] -->
+            </div>
+
+            <!-- Bulk Season Change -->
+            <div class="flex items-center gap-2 text-xs flex-shrink-0" id="batch-bulk-season-wrap">
+              <span class="text-gray-400 font-semibold flex items-center gap-1">
+                <i data-lucide="layers" class="w-3.5 h-3.5 text-apex-cyan"></i> Bulk Set Season:
+              </span>
+              <select id="batch-bulk-season-select" class="bg-black/60 border border-white/20 rounded-lg px-2.5 py-1 text-xs font-bold text-apex-cyan focus:outline-none focus:border-apex-pink cursor-pointer">
+                <option value="1">Season 1</option>
+                <option value="2">Season 2</option>
+                <option value="3">Season 3</option>
+                <option value="4">Season 4</option>
+                <option value="5">Season 5</option>
+                <option value="6">Season 6</option>
+                <option value="7">Season 7</option>
+                <option value="8">Season 8</option>
+              </select>
+              <button id="batch-apply-season-btn" type="button" class="px-3 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition-colors cursor-pointer shadow-sm">
+                Apply to All
+              </button>
+            </div>
+          </div>
+
           <!-- Items Table (Scrollable container optimized for 40+ episodes) -->
           <div class="overflow-x-auto max-h-[550px] overflow-y-auto rounded-xl border border-white/5">
             <table class="w-full text-left text-xs">
@@ -292,7 +330,8 @@ export function renderBatchUploadSection(container, onCompleted) {
                 <tr class="text-gray-400 font-bold uppercase tracking-wider">
                   <th class="py-3 px-3">#</th>
                   <th class="py-3 px-3">File Name</th>
-                  <th id="th-ep-num" class="py-3 px-3 w-28">Episode No.</th>
+                  <th id="th-season-col" class="py-3 px-3 w-32 text-center">Season</th>
+                  <th id="th-ep-num" class="py-3 px-3 w-28 text-center">Episode No.</th>
                   <th class="py-3 px-3">Stream / Item Title</th>
                   <th class="py-3 px-3 w-32">Audio</th>
                   <th class="py-3 px-3 w-40">Status</th>
@@ -336,7 +375,12 @@ export function renderBatchUploadSection(container, onCompleted) {
   const headline = container.querySelector('#batch-headline');
   const subheadline = container.querySelector('#batch-subheadline');
   const thEpNum = container.querySelector('#th-ep-num');
+  const thSeasonCol = container.querySelector('#th-season-col');
   const typePill = container.querySelector('#batch-ai-type-pill');
+  const seasonControls = container.querySelector('#batch-season-controls');
+  const seasonTabs = container.querySelector('#batch-season-tabs');
+  const bulkSeasonSelect = container.querySelector('#batch-bulk-season-select');
+  const applySeasonBtn = container.querySelector('#batch-apply-season-btn');
 
   // Mode Switcher function
   const setMode = (mode) => {
@@ -352,6 +396,8 @@ export function renderBatchUploadSection(container, onCompleted) {
       subheadline.textContent = 'Movie MP4 file select karein. AI auto-detect karega movie name, poster aur official details!';
       titleLabel.textContent = 'Movie Name / Title (Editable)';
       thEpNum.textContent = 'Type';
+      if (thSeasonCol) thSeasonCol.classList.add('hidden');
+      if (seasonControls) seasonControls.classList.add('hidden');
       if (typePill) {
         typePill.textContent = 'FULL MOVIE';
         typePill.className = 'px-2.5 py-1 rounded-md bg-purple-500/20 text-purple-300 font-bold uppercase';
@@ -365,6 +411,8 @@ export function renderBatchUploadSection(container, onCompleted) {
       subheadline.textContent = 'Phone File Manager se multiple MP4 files ek sath select karein. AI auto-detect karega!';
       titleLabel.textContent = 'Detected Anime Series Title (Editable)';
       thEpNum.textContent = 'Episode No.';
+      if (thSeasonCol) thSeasonCol.classList.remove('hidden');
+      if (seasonControls) seasonControls.classList.remove('hidden');
       if (typePill) {
         typePill.textContent = 'TV SERIES';
         typePill.className = 'px-2.5 py-1 rounded-md bg-blue-500/20 text-blue-300 font-bold uppercase';
@@ -377,6 +425,7 @@ export function renderBatchUploadSection(container, onCompleted) {
         const parsed = parseAnimeFilename(item.originalName, isMov);
         item.isMovie = isMov;
         item.animeTitle = parsed.animeTitle;
+        item.seasonNumber = parsed.seasonNumber || 1;
         item.episodeNumber = parsed.episodeNumber;
         item.episodeTitle = parsed.episodeTitle;
       });
@@ -443,6 +492,7 @@ export function renderBatchUploadSection(container, onCompleted) {
         originalName: file.name,
         size: formatSize(file.size),
         animeTitle: parsed.animeTitle,
+        seasonNumber: parsed.seasonNumber || 1,
         episodeNumber: parsed.episodeNumber,
         episodeTitle: parsed.episodeTitle,
         audio: parsed.audio,
@@ -455,9 +505,9 @@ export function renderBatchUploadSection(container, onCompleted) {
       };
     });
 
-    // Natural sort by episode number in Series mode
+    // Natural sort by season and episode number in Series mode
     if (!isMov) {
-      parsedList.sort((a, b) => a.episodeNumber - b.episodeNumber);
+      parsedList.sort((a, b) => ((a.seasonNumber || 1) - (b.seasonNumber || 1)) || (a.episodeNumber - b.episodeNumber));
     }
 
     selectedFiles = parsedList;
@@ -521,6 +571,63 @@ export function renderBatchUploadSection(container, onCompleted) {
     fetchAiDetails(animeTitleInput.value.trim());
   });
 
+  // Render Season Filter Tabs in Series Mode
+  function renderSeasonTabs() {
+    if (!seasonTabs || activeMode === 'movie') return;
+
+    const seasonCounts = {};
+    selectedFiles.forEach(f => {
+      const s = f.seasonNumber || 1;
+      seasonCounts[s] = (seasonCounts[s] || 0) + 1;
+    });
+
+    const seasons = Object.keys(seasonCounts).map(s => parseInt(s, 10)).sort((a, b) => a - b);
+
+    // If active season filter no longer exists, reset to 'all'
+    if (activeSeasonFilter !== 'all' && !seasonCounts[activeSeasonFilter]) {
+      activeSeasonFilter = 'all';
+    }
+
+    let tabsHtml = `
+      <button type="button" class="batch-season-tab px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${activeSeasonFilter === 'all' ? 'bg-apex-pink text-white shadow-md shadow-pink-500/20' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'}" data-season="all">
+        🌟 All (${selectedFiles.length})
+      </button>
+    `;
+
+    seasons.forEach(s => {
+      const count = seasonCounts[s];
+      const isAct = activeSeasonFilter === s;
+      tabsHtml += `
+        <button type="button" class="batch-season-tab px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${isAct ? 'bg-apex-pink text-white shadow-md shadow-pink-500/20' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'}" data-season="${s}">
+          📺 Season ${s} <span class="ml-1 opacity-80 text-[10px]">(${count})</span>
+        </button>
+      `;
+    });
+
+    seasonTabs.innerHTML = tabsHtml;
+
+    seasonTabs.querySelectorAll('.batch-season-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = btn.dataset.season;
+        activeSeasonFilter = val === 'all' ? 'all' : parseInt(val, 10);
+        renderQueueTable();
+      });
+    });
+  }
+
+  // Bulk Apply Season Button Handler
+  applySeasonBtn?.addEventListener('click', () => {
+    if (isUploading || selectedFiles.length === 0) return;
+    const targetSeason = parseInt(bulkSeasonSelect?.value, 10) || 1;
+    selectedFiles.forEach(item => {
+      item.seasonNumber = targetSeason;
+    });
+    // Re-sort
+    selectedFiles.sort((a, b) => ((a.seasonNumber || 1) - (b.seasonNumber || 1)) || (a.episodeNumber - b.episodeNumber));
+    Toast.success(`Updated all ${selectedFiles.length} files to Season ${targetSeason}!`);
+    renderQueueTable();
+  });
+
   // Render Queue Table
   function renderQueueTable() {
     const isMov = activeMode === 'movie';
@@ -528,14 +635,35 @@ export function renderBatchUploadSection(container, onCompleted) {
       ? `Selected Movies Queue (${selectedFiles.length} Movie${selectedFiles.length > 1 ? 's' : ''})`
       : `Selected Episodes Queue (${selectedFiles.length} Episodes)`;
 
-    itemsTbody.innerHTML = selectedFiles.map((item, idx) => `
+    renderSeasonTabs();
+
+    const displayFiles = (activeSeasonFilter === 'all' || isMov)
+      ? selectedFiles
+      : selectedFiles.filter(f => (f.seasonNumber || 1) === activeSeasonFilter);
+
+    itemsTbody.innerHTML = displayFiles.map((item, idx) => `
       <tr id="row-${item.id}" class="hover:bg-white/[0.02] transition-colors">
         <td class="py-3 px-3 font-mono text-gray-500 font-bold">${idx + 1}</td>
         <td class="py-3 px-3">
           <div class="font-semibold text-white truncate max-w-xs" title="${item.originalName}">${item.originalName}</div>
           <div class="text-[10px] text-gray-400 font-mono">${item.size}</div>
         </td>
-        <td class="py-3 px-3">
+        <td class="py-3 px-3 text-center">
+          ${isMov
+            ? `<span class="text-gray-500 font-mono text-[11px]">—</span>`
+            : `<select class="ep-season-select bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-center font-bold text-apex-cyan focus:outline-none focus:border-apex-pink cursor-pointer" data-id="${item.id}" ${isUploading ? 'disabled' : ''}>
+                <option value="1" ${(item.seasonNumber || 1) === 1 ? 'selected' : ''}>Season 1</option>
+                <option value="2" ${(item.seasonNumber || 1) === 2 ? 'selected' : ''}>Season 2</option>
+                <option value="3" ${(item.seasonNumber || 1) === 3 ? 'selected' : ''}>Season 3</option>
+                <option value="4" ${(item.seasonNumber || 1) === 4 ? 'selected' : ''}>Season 4</option>
+                <option value="5" ${(item.seasonNumber || 1) === 5 ? 'selected' : ''}>Season 5</option>
+                <option value="6" ${(item.seasonNumber || 1) === 6 ? 'selected' : ''}>Season 6</option>
+                <option value="7" ${(item.seasonNumber || 1) === 7 ? 'selected' : ''}>Season 7</option>
+                <option value="8" ${(item.seasonNumber || 1) === 8 ? 'selected' : ''}>Season 8</option>
+              </select>`
+          }
+        </td>
+        <td class="py-3 px-3 text-center">
           ${isMov
             ? `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-purple-500/20 text-purple-300 font-bold text-[11px] uppercase"><i data-lucide="film" class="w-3 h-3"></i> Full Movie</span>`
             : `<input type="number" min="1" max="9999" value="${item.episodeNumber}" class="ep-num-input w-20 bg-black/40 border border-white/10 rounded-lg px-2.5 py-1 text-center font-bold text-white focus:outline-none focus:border-apex-pink" data-id="${item.id}" ${isUploading ? 'disabled' : ''} />`
@@ -567,6 +695,16 @@ export function renderBatchUploadSection(container, onCompleted) {
     if (window.lucide) window.lucide.createIcons();
 
     // Attach listeners
+    itemsTbody.querySelectorAll('.ep-season-select').forEach(select => {
+      select.addEventListener('change', () => {
+        const item = selectedFiles.find(f => f.id === select.dataset.id);
+        if (item) {
+          item.seasonNumber = parseInt(select.value, 10) || 1;
+          renderSeasonTabs();
+        }
+      });
+    });
+
     itemsTbody.querySelectorAll('.ep-num-input').forEach(input => {
       input.addEventListener('change', () => {
         const item = selectedFiles.find(f => f.id === input.dataset.id);

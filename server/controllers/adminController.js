@@ -88,13 +88,14 @@ function deleteAnime(req, res, next) {
 
 function createEpisode(req, res, next) {
   try {
-    const { anime_id, episode_number, title, duration, video_url, sources, thumbnail_url, intro_start, intro_end, outro_start, outro_end } = req.body;
+    const { anime_id, season_number, episode_number, title, duration, video_url, sources, thumbnail_url, intro_start, intro_end, outro_start, outro_end } = req.body;
     if (!anime_id || episode_number === undefined) {
       return res.status(400).json({ success: false, error: 'anime_id and episode_number are required' });
     }
 
     const episode = db.createEpisode({
       anime_id,
+      season_number: parseInt(season_number, 10) || 1,
       episode_number,
       title,
       duration,
