@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APEX - Production Anime Streaming Platform</title>
+  <meta name="description" content="APEX is the next-generation anime streaming platform featuring ultra-high definition streaming, skip intro, curated seasons, and community discussions.">
+  <link rel="icon" type="image/svg+xml" href="/assets/logo.svg">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              apex: {
+                bg: '#0a0b10',
+                secondary: '#12141e',
+                tertiary: '#191c2b',
+                pink: '#ff2e93',
+                orange: '#ff7b00',
+                cyan: '#00f5d4',
+                purple: '#9d4edd'
+              }
+            },
+            fontFamily: {
+              sans: ['Outfit', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace']
+            }
+          }
+        }
+      };
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- HLS.js for Adaptive Bitrate Video Streaming -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+  <!-- Custom Stylesheets -->
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/player.css">
+  <style>
+    @keyframes apex-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+  <script>
+    // Global Error Catcher to prevent silent black screen
+    window.addEventListener('error', function(e) {
+      console.error('[APEX Error]', e);
+      var loader = document.getElementById('apex-initial-loader');
+      if (loader) {
+        loader.innerHTML = '<div style="background:#19121e;border:1px solid #ff2e93;padding:24px;border-radius:16px;max-width:400px;margin:20px auto;color:#fff;">' +
+          '<h3 style="color:#ff2e93;font-size:18px;font-weight:bold;margin:0 0 8px 0;">⚡ APEX Initializing</h3>' +
+          '<p style="color:#ccc;font-size:13px;margin:0 0 16px 0;">' + (e.message || 'Components are updating. Tap reload.') + '</p>' +
+          '<button onclick="location.reload()" style="background:#ff2e93;color:#fff;border:none;padding:10px 22px;border-radius:8px;font-weight:bold;cursor:pointer;">Refresh Website</button>' +
+          '</div>';
+      }
+    });
+  </script>
+</head>
+<body class="bg-apex-bg text-gray-100 flex flex-col min-h-screen selection:bg-pink-600 selection:text-white">
+
+  <!-- Navigation Header Placeholder -->
+  <header id="site-header" class="sticky top-0 z-50 glass-nav transition-all duration-300"></header>
+
+  <!-- Main Dynamic SPA View Container -->
+  <main id="app" class="flex-grow">
+    <!-- Visible Loading state so screen is never pure black -->
+    <div id="apex-initial-loader" style="min-height:70vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;">
+      <div style="width:52px;height:52px;border:4px solid rgba(255,46,147,0.2);border-top:4px solid #ff2e93;border-radius:50%;animation:apex-spin 0.9s linear infinite;margin-bottom:16px;"></div>
+      <h2 style="font-size:20px;font-weight:900;color:#ffffff;letter-spacing:1px;margin:0 0 6px 0;font-family:sans-serif;">APEX STREAM</h2>
+      <p style="color:#9ca3af;font-size:13px;margin:0;font-family:sans-serif;">Loading anime platform...</p>
+    </div>
+  </main>
+
+  <!-- Global Footer Placeholder -->
+  <footer id="site-footer" class="mt-20 border-t border-white/5 bg-[#07080b]"></footer>
+
+  <!-- Modal Container -->
+  <div id="modal-container"></div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container"></div>
+
+  <!-- Application JS Modules with cache buster -->
+  <script type="module" src="/js/app.js?v=1.0.5"></script>
+</body>
+</html>

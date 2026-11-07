@@ -1,0 +1,212 @@
+// Prisma Schema for APEX Anime Streaming Platform
+// Supports PostgreSQL in production and SQLite for local development
+
+datasource db {
+  provider = "sqlite" // Change to "postgresql" for PostgreSQL production deployments
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Status {
+  ACTIVE
+  BANNED
+}
+
+enum AnimeStatus {
+  AIRING
+  COMPLETED
+  UPCOMING
+}
+
+enum WatchlistStatus {
+  WATCHING
+  PLAN_TO_WATCH
+  COMPLETED
+  DROPPED
+}
+
+model User {
+  id            String         @id @default(uuid())
+  username      String         @unique
+  email         String         @unique
+  passwordHash  String
+  role          Role           @default(USER)
+  status        Status         @default(ACTIVE)
+  avatar        String?
+  bio           String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  watchlist     Watchlist[]
+  watchHistory  WatchHistory[]
+  comments      Comment[]
+  ratings       AnimeRating[]
+
+  @@map("users")
+}
+
+model Anime {
+  id             String         @id @default(uuid())
+  slug           String         @unique
+  anilistId      Int?           @unique
+  title          String
+  japaneseTitle  String?
+  synopsis       String
+  posterUrl      String
+  bannerUrl      String
+  trailerUrl     String?
+  rating         Float          @default(8.0)
+  status         AnimeStatus    @default(COMPLETED)
+  type           String         @default("TV")
+  season         String?
+  year           Int?
+  studio         String?
+  genres         String         // JSON string or comma-separated
+  episodesCount  Int            @default(0)
+  hasSub         Boolean        @default(true)
+  hasDub         Boolean        @default(true)
+  hasHindiDub    Boolean        @default(false)
+  viewsCount     Int            @default(0)
+  featured       Boolean        @default(false)
+  published      Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  episodes       Episode[]
+  watchlist      Watchlist[]
+  watchHistory   WatchHistory[]
+  comments       Comment[]
+  userRatings    AnimeRating[]
+
+  @@map("anime")
+}
+
+model Episode {
+  id              String         @id @default(uuid())
+  animeId         String
+  episodeNumber   Float
+  title           String
+  thumbnailUrl    String?
+  duration        String         @default("24:00")
+  durationSeconds Int            @default(1440)
+  videoUrl        String         // Primary authorized stream URL
+  introStart      Int            @default(85)
+  introEnd        Int            @default(175)
+  outroStart      Int            @default(1350)
+  outroEnd        Int            @default(1440)
+  published       Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  anime           Anime          @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  sources         VideoSource[]
+  subtitles       SubtitleTrack[]
+  watchHistory    WatchHistory[]
+  comments        Comment[]
+
+  @@unique([animeId, episodeNumber])
+  @@map("episodes")
+}
+
+model VideoSource {
+  id        String   @id @default(uuid())
+  episodeId String
+  server    String   // e.g. "Kaizen HLS", "Titan HD"
+  type      String   // "hls" or "mp4"
+  quality   String   // "1080p", "720p", "480p", "Auto"
+  url       String   // Authorized stream URL
+  audio     String   @default("ja") // "ja" (Japanese), "en" (English Dub), "hi" (Hindi Dub)
+  createdAt DateTime @default(now())
+
+  episode   Episode  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@map("video_sources")
+}
+
+model SubtitleTrack {
+  id        String   @id @default(uuid())
+  episodeId String
+  label     String   // "English", "Español", "Hindi", "Français"
+  lang      String   // "en", "es", "hi", "fr"
+  src       String   // WebVTT or SRT URL
+  createdAt DateTime @default(now())
+
+  episode   Episode  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@map("subtitle_tracks")
+}
+
+model Watchlist {
+  id        String          @id @default(uuid())
+  userId    String
+  animeId   String
+  status    WatchlistStatus @default(WATCHING)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  anime     Anime           @relation(fields: [animeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, animeId])
+  @@map("watchlist")
+}
+
+model WatchHistory {
+  id              String   @id @default(uuid())
+  userId          String
+  animeId         String
+  episodeId       String
+  progressSeconds Int      @default(0)
+  totalSeconds    Int      @default(0)
+  completed       Boolean  @default(false)
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  anime           Anime    @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  episode         Episode  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, episodeId])
+  @@map("watch_history")
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  userId    String
+  animeId   String
+  episodeId String
+  content   String
+  isSpoiler Boolean  @default(false)
+  likes     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  anime     Anime    @relation(fields: [animeId], references: [id], onDelete: Cascade)
+  episode   Episode  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@map("comments")
+}
+
+model AnimeRating {
+  id        String   @id @default(uuid())
+  userId    String
+  animeId   String
+  rating    Int      // 1 to 10
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  anime     Anime    @relation(fields: [animeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, animeId])
+  @@map("anime_ratings")
+}
