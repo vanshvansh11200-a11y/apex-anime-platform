@@ -1,5 +1,8 @@
 const fs = require('fs');
 const path = require('path');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const config = require('../config');
 const db = require('../database/db');
 const telegramResolver = require('../services/telegramResolver');
 const telegramBotService = require('../services/telegramBotService');
@@ -437,11 +440,17 @@ async function stopBot(req, res, next) {
 function uploadVideo(req, res, next) {
   try {
     const rawFilename = req.headers['x-filename'] || `video_${Date.now()}.mp4`;
-    const safeName = decodeURIComponent(rawFilename).replace(/[^a-zA-Z0-9._-]/g, '_');
+    let safeName = decodeURIComponent(rawFilename).replace(/[^a-zA-Z0-9._-]/g, '_');
     const videosDir = path.resolve(__dirname, '../../public/videos');
 
     if (!fs.existsSync(videosDir)) {
       fs.mkdirSync(videosDir, { recursive: true });
+    }
+
+    if (fs.existsSync(path.join(videosDir, safeName))) {
+      const ext = path.extname(safeName);
+      const base = path.basename(safeName, ext);
+      safeName = `${base}_${Date.now()}${ext}`;
     }
 
     const targetPath = path.join(videosDir, safeName);
@@ -486,6 +495,91 @@ async function aiEnrich(req, res, next) {
   }
 }
 
+// Admin Account & Credentials Management
+function getAdminCredentials(req, res, next) {
+  try {
+    const admin = db.findUserById(req.user.id) || db.data.users.find(u => u.role === 'admin');
+    if (!admin) {
+      return res.status(404).json({ success: false, error: 'Admin account not found' });
+    }
+    res.json({
+      success: true,
+      username: admin.username,
+      email: admin.email,
+      role: admin.role
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function updateAdminCredentials(req, res, next) {
+  try {
+    const { username, email, currentPassword, newPassword } = req.body;
+    const admin = db.findUserById(req.user.id) || db.data.users.find(u => u.role === 'admin');
+
+    if (!admin) {
+      return res.status(404).json({ success: false, error: 'Admin account not found' });
+    }
+
+    if (newPassword) {
+      if (newPassword.length < 6) {
+        return res.status(400).json({ success: false, error: 'New password must be at least 6 characters long' });
+      }
+      if (currentPassword) {
+        const isMatch = await bcrypt.compare(currentPassword, admin.password_hash);
+        if (!isMatch) {
+          return res.status(400).json({ success: false, error: 'Current password is incorrect' });
+        }
+      }
+    }
+
+    const updates = {};
+
+    if (username && username.trim() !== admin.username) {
+      const existingUser = db.findUserByUsername(username.trim());
+      if (existingUser && existingUser.id !== admin.id) {
+        return res.status(409).json({ success: false, error: 'Username already in use by another user' });
+      }
+      updates.username = username.trim();
+    }
+
+    if (email && email.trim() !== admin.email) {
+      const existingEmail = db.findUserByEmail(email.trim());
+      if (existingEmail && existingEmail.id !== admin.id) {
+        return res.status(409).json({ success: false, error: 'Email already in use by another user' });
+      }
+      updates.email = email.trim();
+    }
+
+    if (newPassword) {
+      updates.password_hash = await bcrypt.hash(newPassword, 10);
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, error: 'No changes provided' });
+    }
+
+    const updated = db.updateUser(admin.id, updates);
+    const { password_hash: _, ...safeAdmin } = updated;
+
+    const token = jwt.sign(
+      { id: safeAdmin.id, role: safeAdmin.role },
+      config.jwtSecret,
+      { expiresIn: config.jwtExpiresIn }
+    );
+
+    res.json({
+      success: true,
+      message: 'Admin credentials updated successfully!',
+      user: safeAdmin,
+      token
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   getStats,
   createAnime,
@@ -503,5 +597,7 @@ module.exports = {
   saveBotConfig,
   stopBot,
   uploadVideo,
-  aiEnrich
+  aiEnrich,
+  getAdminCredentials,
+  updateAdminCredentials
 };

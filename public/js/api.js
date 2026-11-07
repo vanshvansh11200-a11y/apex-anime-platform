@@ -279,6 +279,18 @@ class ApiClient {
     });
   }
 
+  // --- Admin Account & Credentials Settings ---
+  getAdminCredentials() {
+    return this.request('/admin/credentials');
+  }
+
+  updateAdminCredentials(data) {
+    return this.request('/admin/credentials', {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
   generateStreamLink(url) {
     return this.request('/stream/generate-link', {
       method: 'POST',

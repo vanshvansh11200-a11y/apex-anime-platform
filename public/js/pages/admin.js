@@ -2,6 +2,7 @@ import { api } from '../api.js';
 import { state } from '../state.js';
 import { router } from '../router.js';
 import { Toast } from '../components/toast.js';
+import { renderBatchUploadSection } from '../components/batchUpload.js';
 
 function statCard(icon, label, value, color = 'text-apex-pink') {
   return `
@@ -24,60 +25,108 @@ function renderAnimeForm(existingAnime = null) {
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="md:col-span-2">
           <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Title *</label>
-          <input type="text" name="title" value="${a.title || ''}" required placeholder="e.g. Solo Leveling" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink transition-colors" />
+          <input type="text" name="title" value="${a.title || ''}" required placeholder="e.g. Solo Leveling, Jawan, Inception" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink transition-colors text-white font-bold" />
+        </div>
+
+        <!-- Interactive Visual Banner & Poster Customizer Card -->
+        <div class="md:col-span-2 p-4 rounded-xl bg-black/50 border border-white/10 space-y-4">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-apex-pink flex items-center gap-1.5">
+              <i data-lucide="image" class="w-4 h-4"></i> Banner & Poster Artwork Customizer
+            </span>
+            <button type="button" id="edit-ai-fetch-banner-btn" class="px-3 py-1 rounded-lg bg-pink-500/20 hover:bg-pink-500/30 text-apex-pink font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors">
+              <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> ✨ AI Auto-Find Official Banner
+            </button>
+          </div>
+
+          <!-- Live Visual Preview of Banner with Poster overlay -->
+          <div class="relative w-full h-36 sm:h-44 rounded-xl overflow-hidden border border-white/10 bg-black/60 flex items-end p-3">
+            <img id="edit-banner-preview-img" src="${a.banner_url || a.poster_url || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1920'}" class="absolute inset-0 w-full h-full object-cover filter brightness-75 transition-all" onerror="this.src='https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1920'" />
+            <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent"></div>
+            
+            <div class="relative z-10 flex items-center gap-3">
+              <img id="edit-poster-preview-img" src="${a.poster_url || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600'}" class="w-14 sm:w-16 aspect-[2/3] object-cover rounded-lg border border-white/20 shadow-md flex-shrink-0" onerror="this.src='https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600'" />
+              <div class="text-white min-w-0">
+                <span class="text-[10px] uppercase font-bold text-apex-pink px-2 py-0.5 rounded bg-black/70 border border-white/10">Live Banner Preview</span>
+                <p id="edit-preview-title" class="font-bold text-sm truncate max-w-xs sm:max-w-md mt-0.5">${a.title || 'Anime / Movie Title'}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Banner & Poster inputs with file upload buttons -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">
+                Banner URL (Wide Landscape 16:9)
+              </label>
+              <div class="flex gap-1.5">
+                <input type="url" name="banner_url" id="edit-banner-url-input" value="${a.banner_url || ''}" placeholder="Paste URL or Upload..." class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-apex-pink text-white font-mono" />
+                <button type="button" id="edit-upload-banner-btn" class="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold text-white flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+                  <i data-lucide="upload" class="w-3.5 h-3.5"></i> Upload Image
+                </button>
+                <input type="file" id="edit-banner-file-input" accept="image/*" class="hidden" />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">
+                Poster URL (Portrait Cover)
+              </label>
+              <div class="flex gap-1.5">
+                <input type="url" name="poster_url" id="edit-poster-url-input" value="${a.poster_url || ''}" placeholder="Paste URL or Upload..." class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-apex-pink text-white font-mono" />
+                <button type="button" id="edit-upload-poster-btn" class="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold text-white flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+                  <i data-lucide="upload" class="w-3.5 h-3.5"></i> Upload Image
+                </button>
+                <input type="file" id="edit-poster-file-input" accept="image/*" class="hidden" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Original / Japanese / Sub Title</label>
+          <input type="text" name="japanese_title" value="${a.japanese_title || ''}" placeholder="Original language title..." class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink transition-colors text-white" />
         </div>
         <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Japanese Title</label>
-          <input type="text" name="japanese_title" value="${a.japanese_title || ''}" placeholder="俺だけレベルアップな件" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink transition-colors" />
-        </div>
-        <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Studio</label>
-          <input type="text" name="studio" value="${a.studio || ''}" placeholder="A-1 Pictures" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink transition-colors" />
+          <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Studio / Production House</label>
+          <input type="text" name="studio" value="${a.studio || ''}" placeholder="e.g. YRF, Marvel Studios, A-1 Pictures" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink transition-colors text-white" />
         </div>
         <div class="md:col-span-2">
-          <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Synopsis</label>
-          <textarea name="synopsis" rows="3" placeholder="Anime synopsis..." class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink transition-colors resize-none">${a.synopsis || ''}</textarea>
-        </div>
-        <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Poster URL</label>
-          <input type="url" name="poster_url" value="${a.poster_url || ''}" placeholder="https://..." class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink transition-colors" />
-        </div>
-        <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Banner URL</label>
-          <input type="url" name="banner_url" value="${a.banner_url || ''}" placeholder="https://..." class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink transition-colors" />
+          <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Synopsis / Storyline</label>
+          <textarea name="synopsis" rows="3" placeholder="Movie or Series storyline..." class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink transition-colors resize-none text-white">${a.synopsis || ''}</textarea>
         </div>
         <div>
           <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Status</label>
-          <select name="status" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink cursor-pointer">
+          <select name="status" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink cursor-pointer text-white">
             ${['Completed', 'Airing', 'Upcoming'].map(s => `<option value="${s}" ${a.status === s ? 'selected' : ''}>${s}</option>`).join('')}
           </select>
         </div>
         <div>
           <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Type</label>
-          <select name="type" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink cursor-pointer">
+          <select name="type" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink cursor-pointer text-white">
             ${['TV', 'Movie', 'OVA', 'ONA', 'Special'].map(t => `<option value="${t}" ${a.type === t ? 'selected' : ''}>${t}</option>`).join('')}
           </select>
         </div>
         <div>
           <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Season</label>
-          <select name="season" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink cursor-pointer">
+          <select name="season" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink cursor-pointer text-white">
             ${['Winter', 'Spring', 'Summer', 'Fall'].map(s => `<option value="${s}" ${a.season === s ? 'selected' : ''}>${s}</option>`).join('')}
           </select>
         </div>
         <div>
           <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Year</label>
-          <input type="number" name="year" value="${a.year || new Date().getFullYear()}" min="1990" max="2030" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink" />
+          <input type="number" name="year" value="${a.year || new Date().getFullYear()}" min="1950" max="2035" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink text-white" />
         </div>
         <div>
           <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Rating (0-10)</label>
-          <input type="number" name="rating" value="${a.rating || 8.0}" min="0" max="10" step="0.1" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink" />
+          <input type="number" name="rating" value="${a.rating || 8.0}" min="0" max="10" step="0.1" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink text-white" />
         </div>
         <div class="md:col-span-2">
           <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5">Genres (comma separated)</label>
-          <input type="text" name="genres" value="${Array.isArray(a.genres) ? a.genres.join(', ') : (a.genres || '')}" placeholder="Action, Fantasy, Supernatural" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink" />
+          <input type="text" name="genres" value="${Array.isArray(a.genres) ? a.genres.join(', ') : (a.genres || '')}" placeholder="Action, Drama, Thriller, Bollywood, Sci-Fi" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-apex-pink text-white" />
         </div>
       </div>
-      <div class="flex flex-wrap gap-4">
+      <div class="flex flex-wrap gap-4 pt-2">
         <label class="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" name="has_sub" ${a.has_sub !== false ? 'checked' : ''} class="accent-apex-pink"> Has Sub</label>
         <label class="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" name="has_dub" ${a.has_dub ? 'checked' : ''} class="accent-apex-pink"> Has Dub (English)</label>
         <label class="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" name="has_hindi_dub" ${a.has_hindi_dub ? 'checked' : ''} class="accent-apex-pink"> Has Hindi Dub</label>
@@ -86,6 +135,137 @@ function renderAnimeForm(existingAnime = null) {
       </div>
     </form>
   `;
+}
+
+function attachAnimeFormHandlers(container, existingAnime = null) {
+  const bannerInput = container.querySelector('#edit-banner-url-input');
+  const posterInput = container.querySelector('#edit-poster-url-input');
+  const bannerImg = container.querySelector('#edit-banner-preview-img');
+  const posterImg = container.querySelector('#edit-poster-preview-img');
+  const titleInput = container.querySelector('input[name="title"]');
+  const previewTitle = container.querySelector('#edit-preview-title');
+
+  // Title sync
+  titleInput?.addEventListener('input', () => {
+    if (previewTitle) previewTitle.textContent = titleInput.value || 'Title';
+  });
+
+  // Live preview for Banner URL
+  bannerInput?.addEventListener('input', () => {
+    const val = bannerInput.value.trim();
+    if (bannerImg && val) bannerImg.src = val;
+  });
+
+  // Live preview for Poster URL
+  posterInput?.addEventListener('input', () => {
+    const val = posterInput.value.trim();
+    if (posterImg && val) posterImg.src = val;
+  });
+
+  // Banner file upload from Phone
+  const uploadBannerBtn = container.querySelector('#edit-upload-banner-btn');
+  const bannerFileInput = container.querySelector('#edit-banner-file-input');
+
+  uploadBannerBtn?.addEventListener('click', () => bannerFileInput?.click());
+
+  bannerFileInput?.addEventListener('change', async () => {
+    const file = bannerFileInput.files?.[0];
+    if (!file) return;
+
+    uploadBannerBtn.disabled = true;
+    uploadBannerBtn.innerHTML = `<i data-lucide="loader" class="w-3.5 h-3.5 animate-spin"></i> Uploading...`;
+    if (window.lucide) window.lucide.createIcons();
+
+    try {
+      const res = await api.uploadVideo(file);
+      if (res && res.url) {
+        bannerInput.value = res.url;
+        if (bannerImg) bannerImg.src = res.url;
+        Toast.success('✓ New banner image uploaded and applied!');
+      }
+    } catch (err) {
+      Toast.error('Banner upload failed: ' + err.message);
+    } finally {
+      uploadBannerBtn.disabled = false;
+      uploadBannerBtn.innerHTML = `<i data-lucide="upload" class="w-3.5 h-3.5"></i> Upload Image`;
+      if (window.lucide) window.lucide.createIcons();
+    }
+  });
+
+  // Poster file upload from Phone
+  const uploadPosterBtn = container.querySelector('#edit-upload-poster-btn');
+  const posterFileInput = container.querySelector('#edit-poster-file-input');
+
+  uploadPosterBtn?.addEventListener('click', () => posterFileInput?.click());
+
+  posterFileInput?.addEventListener('change', async () => {
+    const file = posterFileInput.files?.[0];
+    if (!file) return;
+
+    uploadPosterBtn.disabled = true;
+    uploadPosterBtn.innerHTML = `<i data-lucide="loader" class="w-3.5 h-3.5 animate-spin"></i> Uploading...`;
+    if (window.lucide) window.lucide.createIcons();
+
+    try {
+      const res = await api.uploadVideo(file);
+      if (res && res.url) {
+        posterInput.value = res.url;
+        if (posterImg) posterImg.src = res.url;
+        Toast.success('✓ New poster image uploaded and applied!');
+      }
+    } catch (err) {
+      Toast.error('Poster upload failed: ' + err.message);
+    } finally {
+      uploadPosterBtn.disabled = false;
+      uploadPosterBtn.innerHTML = `<i data-lucide="upload" class="w-3.5 h-3.5"></i> Upload Image`;
+      if (window.lucide) window.lucide.createIcons();
+    }
+  });
+
+  // AI Auto-Find Official Banner & Poster
+  const aiFetchBtn = container.querySelector('#edit-ai-fetch-banner-btn');
+  aiFetchBtn?.addEventListener('click', async () => {
+    const title = titleInput?.value?.trim();
+    if (!title) {
+      Toast.error('Please enter the Title first!');
+      titleInput?.focus();
+      return;
+    }
+
+    const typeSelect = container.querySelector('select[name="type"]');
+    const isMovie = typeSelect ? typeSelect.value === 'Movie' : false;
+
+    aiFetchBtn.disabled = true;
+    aiFetchBtn.innerHTML = `<i data-lucide="loader" class="w-3.5 h-3.5 animate-spin"></i> Searching Official Banner...`;
+    if (window.lucide) window.lucide.createIcons();
+
+    try {
+      const res = await api.aiEnrich(title, 1, isMovie);
+      if (res && res.found) {
+        if (res.banner_url) {
+          bannerInput.value = res.banner_url;
+          if (bannerImg) bannerImg.src = res.banner_url;
+        }
+        if (res.poster_url) {
+          posterInput.value = res.poster_url;
+          if (posterImg) posterImg.src = res.poster_url;
+        }
+        const synInput = container.querySelector('textarea[name="synopsis"]');
+        if (synInput && (!synInput.value.trim() || synInput.value.length < 20) && res.synopsis) {
+          synInput.value = res.synopsis;
+        }
+        Toast.success(`✨ Official HD Banner & Poster auto-fetched for "${res.title || title}"!`);
+      } else {
+        Toast.warning('Could not find official artwork automatically. You can upload an image or paste a URL.');
+      }
+    } catch (err) {
+      Toast.error('AI fetch failed: ' + err.message);
+    } finally {
+      aiFetchBtn.disabled = false;
+      aiFetchBtn.innerHTML = `<i data-lucide="sparkles" class="w-3.5 h-3.5"></i> ✨ AI Auto-Find Official Banner`;
+      if (window.lucide) window.lucide.createIcons();
+    }
+  });
 }
 
 function renderEpisodeForm(animeId = '', existingEp = null) {
@@ -734,7 +914,10 @@ export async function renderAdminDashboard(app) {
                 </h3>
                 <p class="text-xs text-gray-400 mt-0.5">Manage series folders, episodes count, and full movie streams</p>
               </div>
-              <div class="flex items-center gap-2 w-full sm:w-auto">
+              <div class="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                <button id="quick-batch-upload-btn" class="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:opacity-90 text-white shadow-lg shadow-pink-500/25 transition-all cursor-pointer">
+                  <i data-lucide="folder-plus" class="w-4 h-4"></i> ⚡ Multi MP4 Upload (Up to 40+ Eps)
+                </button>
                 <button id="quick-telegram-btn" class="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/25 transition-all cursor-pointer">
                   <i data-lucide="send" class="w-4 h-4"></i> Add Telegram / 3rd Party Link
                 </button>
@@ -879,6 +1062,14 @@ export async function renderAdminDashboard(app) {
         }
 
         // Header Buttons
+        content.querySelector('#quick-batch-upload-btn')?.addEventListener('click', () => {
+          activeTab = 'batch';
+          document.querySelectorAll('.admin-tab').forEach(b => {
+            b.className = `admin-tab px-5 py-2 rounded-lg text-sm font-semibold transition-all ${b.dataset.tab === activeTab ? 'bg-apex-pink text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}`;
+          });
+          renderTabContent('batch');
+        });
+
         content.querySelector('#quick-telegram-btn')?.addEventListener('click', () => {
           openQuickPublish('', '', 'series');
         });
@@ -893,6 +1084,8 @@ export async function renderAdminDashboard(app) {
               await loadData();
               renderTabContent('anime');
             } catch (err) { Toast.error(err.message); }
+          }, (modalContainer) => {
+            attachAnimeFormHandlers(modalContainer, null);
           });
         });
 
@@ -1123,6 +1316,8 @@ export async function renderAdminDashboard(app) {
                 await loadData();
                 renderTabContent('anime');
               } catch (err) { Toast.error(err.message); }
+            }, (modalContainer) => {
+              attachAnimeFormHandlers(modalContainer, anime);
             });
           });
         });
@@ -1142,6 +1337,195 @@ export async function renderAdminDashboard(app) {
       };
 
       renderCatalogView();
+
+    } else if (tab === 'batch') {
+      renderBatchUploadSection(content, async () => {
+        await loadData();
+      });
+
+    } else if (tab === 'settings') {
+      content.innerHTML = `
+        <div class="max-w-2xl mx-auto space-y-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="font-black text-xl text-white flex items-center gap-2">
+                <i data-lucide="shield-check" class="w-6 h-6 text-apex-pink"></i> Admin Security & Credentials
+              </h3>
+              <p class="text-xs text-gray-400 mt-0.5">Master Admin ka Username, Email aur Password yaha se change karein</p>
+            </div>
+            <span class="px-3 py-1 rounded-full text-xs font-bold bg-pink-500/10 border border-pink-500/20 text-apex-pink flex items-center gap-1.5">
+              <i data-lucide="lock" class="w-3.5 h-3.5"></i> Admin Only
+            </span>
+          </div>
+
+          <!-- Main Credentials Card -->
+          <div class="glass-panel rounded-2xl p-6 sm:p-8 border border-white/10 space-y-6">
+            <form id="admin-credentials-form" class="space-y-5">
+              
+              <!-- Section 1: Username & Email -->
+              <div>
+                <h4 class="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
+                  <i data-lucide="user" class="w-3.5 h-3.5 text-apex-cyan"></i> 1. Admin Identity
+                </h4>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-xs font-bold text-gray-300 mb-1.5">Admin Username *</label>
+                    <input type="text" id="admin-user-input" required class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-apex-pink font-semibold" placeholder="e.g. MyAdmin" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-bold text-gray-300 mb-1.5">Admin Login Email *</label>
+                    <input type="email" id="admin-email-input" required class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-apex-pink font-semibold" placeholder="admin@apex.stream" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 2: Password Change -->
+              <div class="pt-4 border-t border-white/5 space-y-4">
+                <h4 class="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-1.5">
+                  <i data-lucide="key" class="w-3.5 h-3.5 text-apex-orange"></i> 2. Change Password (Optional)
+                </h4>
+                <p class="text-xs text-gray-400">Agar password nahi badalna, to niche ke password fields khali chhod dein.</p>
+
+                <div class="space-y-3">
+                  <div>
+                    <label class="block text-xs font-bold text-gray-300 mb-1.5">Current Password (Purana Password)</label>
+                    <div class="relative">
+                      <input type="password" id="admin-current-pass" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-apex-pink pr-10" placeholder="••••••••" />
+                      <button type="button" class="toggle-pass-btn absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white" data-target="admin-current-pass">
+                        <i data-lucide="eye" class="w-4 h-4"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-xs font-bold text-gray-300 mb-1.5">New Password (Naya Password)</label>
+                      <div class="relative">
+                        <input type="password" id="admin-new-pass" minlength="6" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-apex-pink pr-10" placeholder="Min 6 characters" />
+                        <button type="button" class="toggle-pass-btn absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white" data-target="admin-new-pass">
+                          <i data-lucide="eye" class="w-4 h-4"></i>
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-bold text-gray-300 mb-1.5">Confirm New Password</label>
+                      <div class="relative">
+                        <input type="password" id="admin-confirm-pass" minlength="6" class="w-full bg-[var(--input-bg)] border border-[var(--border-color)] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-apex-pink pr-10" placeholder="Re-enter new password" />
+                        <button type="button" class="toggle-pass-btn absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white" data-target="admin-confirm-pass">
+                          <i data-lucide="eye" class="w-4 h-4"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Save Button -->
+              <div class="pt-4 border-t border-white/5 flex items-center justify-between gap-4 flex-wrap">
+                <span class="text-xs text-gray-400">Save karte hi aapka naya login password turant active ho jayega.</span>
+                <button type="submit" id="save-credentials-btn" class="px-6 py-3 rounded-xl bg-gradient-to-r from-apex-pink to-purple-600 hover:opacity-90 font-bold text-white text-sm shadow-lg shadow-pink-500/25 flex items-center gap-2 cursor-pointer transition-all">
+                  <i data-lucide="check-circle" class="w-4 h-4"></i> Save Credentials
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      `;
+
+      if (window.lucide) window.lucide.createIcons();
+
+      const userInput = content.querySelector('#admin-user-input');
+      const emailInput = content.querySelector('#admin-email-input');
+      const curPassInput = content.querySelector('#admin-current-pass');
+      const newPassInput = content.querySelector('#admin-new-pass');
+      const confirmPassInput = content.querySelector('#admin-confirm-pass');
+      const credForm = content.querySelector('#admin-credentials-form');
+      const saveBtn = content.querySelector('#save-credentials-btn');
+
+      api.getAdminCredentials().then(res => {
+        if (res && res.success) {
+          if (userInput) userInput.value = res.username || '';
+          if (emailInput) emailInput.value = res.email || '';
+        }
+      }).catch(() => {
+        if (userInput) userInput.value = state.user?.username || 'ApexAdmin';
+        if (emailInput) emailInput.value = state.user?.email || 'admin@apex.stream';
+      });
+
+      content.querySelectorAll('.toggle-pass-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const target = content.querySelector(`#${btn.dataset.target}`);
+          if (target) {
+            target.type = target.type === 'password' ? 'text' : 'password';
+            btn.innerHTML = `<i data-lucide="${target.type === 'password' ? 'eye' : 'eye-off'}" class="w-4 h-4"></i>`;
+            if (window.lucide) window.lucide.createIcons();
+          }
+        });
+      });
+
+      credForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const username = userInput.value.trim();
+        const email = emailInput.value.trim();
+        const currentPassword = curPassInput.value;
+        const newPassword = newPassInput.value;
+        const confirmPassword = confirmPassInput.value;
+
+        if (!username || !email) {
+          Toast.error('Username and Email are required!');
+          return;
+        }
+
+        if (newPassword) {
+          if (newPassword.length < 6) {
+            Toast.error('New password must be at least 6 characters long!');
+            newPassInput.focus();
+            return;
+          }
+          if (newPassword !== confirmPassword) {
+            Toast.error('New Password and Confirm Password do not match!');
+            confirmPassInput.focus();
+            return;
+          }
+          if (!currentPassword) {
+            Toast.error('Please enter your Current Password to set a new password!');
+            curPassInput.focus();
+            return;
+          }
+        }
+
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = `<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> Saving...`;
+        if (window.lucide) window.lucide.createIcons();
+
+        try {
+          const res = await api.updateAdminCredentials({
+            username,
+            email,
+            currentPassword: currentPassword || undefined,
+            newPassword: newPassword || undefined
+          });
+
+          if (res && res.success) {
+            if (res.user) state.setUser(res.user);
+            if (res.token) state.setToken(res.token);
+
+            curPassInput.value = '';
+            newPassInput.value = '';
+            confirmPassInput.value = '';
+
+            Toast.success('🎉 Admin Username & Password successfully updated!');
+          }
+        } catch (err) {
+          Toast.error(err.message || 'Failed to update admin credentials');
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = `<i data-lucide="check-circle" class="w-4 h-4"></i> Save Credentials`;
+          if (window.lucide) window.lucide.createIcons();
+        }
+      });
 
     } else if (tab === 'users') {
       content.innerHTML = `
@@ -1602,9 +1986,9 @@ export async function renderAdminDashboard(app) {
 
       <!-- Tab Nav -->
       <div class="flex gap-2 mb-6 border-b border-white/5 pb-2 overflow-x-auto">
-        ${['dashboard', 'anime', 'bot', 'users', 'fetcher'].map(tab => `
+        ${['dashboard', 'anime', 'batch', 'settings', 'bot', 'users', 'fetcher'].map(tab => `
           <button class="admin-tab px-5 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${tab === activeTab ? 'bg-apex-pink text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}" data-tab="${tab}">
-            ${tab === 'bot' ? '🤖 Telegram Bot' : (tab === 'fetcher' ? '🌐 3rd-Party Fetcher' : (tab.charAt(0).toUpperCase() + tab.slice(1)))}
+            ${tab === 'batch' ? '⚡ Multi MP4 Upload' : (tab === 'settings' ? '⚙️ Admin Settings (User & Pass)' : (tab === 'bot' ? '🤖 Telegram Bot' : (tab === 'fetcher' ? '🌐 3rd-Party Fetcher' : (tab.charAt(0).toUpperCase() + tab.slice(1)))))}
           </button>
         `).join('')}
       </div>

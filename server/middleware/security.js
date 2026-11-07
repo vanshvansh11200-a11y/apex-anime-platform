@@ -70,7 +70,7 @@ const authRateLimiter = createRateLimiter({
 // General API rate limiter (prevents scraping / DDoS)
 const apiRateLimiter = createRateLimiter({
   windowMs: 60 * 1000, // 1 minute
-  max: 180,             // max 180 requests per minute
+  max: 500,             // increased to 500 to comfortably support 40+ batch uploads
   message: 'Too many API requests. Please slow down.'
 });
 

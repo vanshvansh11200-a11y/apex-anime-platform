@@ -21,6 +21,10 @@ router.delete('/episodes/:id', adminController.deleteEpisode);
 router.post('/quick-publish', adminController.quickPublish);
 router.post('/quick_publish', adminController.quickPublish);
 
+// Admin Account & Security Settings
+router.get('/credentials', adminController.getAdminCredentials);
+router.put('/credentials', adminController.updateAdminCredentials);
+
 // User management
 router.get('/users', adminController.getUsers);
 router.put('/users/:id', adminController.updateUser);
