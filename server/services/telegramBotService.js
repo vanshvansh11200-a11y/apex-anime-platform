@@ -1,7 +1,11 @@
+const fs = require('fs');
+const path = require('path');
 const https = require('https');
 const db = require('../database/db');
 const telegramResolver = require('./telegramResolver');
 const aiEnricherService = require('./aiEnricherService');
+const aiClassifierService = require('./aiClassifierService');
+const telegramMediaDownloader = require('./telegramMediaDownloader');
 
 class TelegramBotService {
   constructor() {
@@ -11,6 +15,7 @@ class TelegramBotService {
     this.pollingTimeout = null;
     this.lastUpdateId = 0;
     this.userLastMedia = new Map(); // Store last sent media per chatId
+    this.activeDownloads = new Set();
   }
 
   /**
@@ -65,7 +70,7 @@ class TelegramBotService {
   }
 
   /**
-   * Send text message with Markdown formatting
+   * Send text message with Markdown/HTML formatting
    */
   async sendMessage(chatId, text, extra = {}) {
     try {
@@ -88,6 +93,26 @@ class TelegramBotService {
   }
 
   /**
+   * Edit existing message text
+   */
+  async editMessageText(chatId, messageId, text, extra = {}) {
+    try {
+      return await this.apiRequest('editMessageText', {
+        chat_id: chatId,
+        message_id: messageId,
+        text,
+        parse_mode: 'HTML',
+        ...extra
+      });
+    } catch (err) {
+      // Ignore identical text edit errors
+      if (!err.message.includes('message is not modified')) {
+        console.warn('[Bot Edit Error]:', err.message);
+      }
+    }
+  }
+
+  /**
    * Start Bot with long-polling
    */
   async start(customToken = null) {
@@ -100,6 +125,12 @@ class TelegramBotService {
       console.log('[TelegramBot] No valid bot token configured. Bot is inactive.');
       return false;
     }
+
+    // Ensure target storage directories exist on device
+    aiClassifierService.classify({ filename: 'test' }).then(res => {
+      telegramMediaDownloader.ensureDirectory(aiClassifierService.ANIME_BASE_DIR);
+      telegramMediaDownloader.ensureDirectory(aiClassifierService.MOVIE_BASE_DIR);
+    }).catch(() => {});
 
     try {
       this.botInfo = await this.apiRequest('getMe');
@@ -149,7 +180,6 @@ class TelegramBotService {
       }
     } catch (err) {
       if (this.isRunning) {
-        // Sleep 3s on error before retrying
         await new Promise(r => setTimeout(r, 3000));
       }
     }
@@ -169,7 +199,7 @@ class TelegramBotService {
     const chatId = msg.chat.id;
     const text = (msg.text || msg.caption || '').trim();
 
-    // 1. Commands
+    // 1. Core Commands
     if (text.startsWith('/start') || text.startsWith('/help')) {
       return this.handleStartCommand(chatId);
     }
@@ -178,11 +208,15 @@ class TelegramBotService {
       return this.handleStatusCommand(chatId);
     }
 
-    if (text.startsWith('/folders') || text.startsWith('/list')) {
+    if (text.startsWith('/folders')) {
       return this.handleFoldersCommand(chatId);
     }
 
-    if (text.startsWith('/publish') || text.startsWith('/add')) {
+    if (text.startsWith('/files') || text.startsWith('/downloads')) {
+      return this.handleFilesCommand(chatId);
+    }
+
+    if (text.startsWith('/publish')) {
       return this.handlePublishCommand(chatId, text, msg);
     }
 
@@ -190,8 +224,12 @@ class TelegramBotService {
       return this.handleMovieCommand(chatId, text, msg);
     }
 
-    // 2. Video or Document uploaded/forwarded
-    if (msg.video || msg.document) {
+    if (text.startsWith('/download') || text.startsWith('/save')) {
+      return this.handleDownloadUrlCommand(chatId, text, msg);
+    }
+
+    // 2. Video or Document uploaded/forwarded -> AI Auto-Detect, Rename & Save to Phone
+    if (msg.video || (msg.document && this.isVideoDocument(msg.document))) {
       return this.handleMediaUpload(chatId, msg);
     }
 
@@ -203,16 +241,31 @@ class TelegramBotService {
 
     // Default reply for random text
     await this.sendMessage(chatId, `
-👋 <b>APEX Anime Stream Bot</b>
+👋 <b>APEX AI Media & Anime Bot</b>
 
-Kisi bhi video ya episode ka link bhejo (jaise: <code>https://t.me/channel/123</code>), main aapko direct streaming link bana kar dunga!
+Mujhe koi bhi <b>Video send ya forward karein</b>!
+Mera AI apne aap check karega ki:
+• Ye <b>Anime Series</b> hai ya <b>Movie</b>
+• Clean Title & Episode Number nikalega (e.g. <code>Naruto Ep 1.mp4</code>)
+• <b>Anime</b> ko direct: <code>/storage/emulated/0/ALL ANIMA VIDIOS/</code> me save karega!
+• <b>Movies</b> ko direct: <code>/storage/emulated/0/ALL MOVIES FOLDERS/</code> me save karega!
 
 📌 <b>Commands:</b>
-• <code>/publish &lt;Anime&gt; &lt;Ep&gt;</code> - Seedha website pe live karein
-• <code>/movie &lt;Title&gt;</code> - Standalone movie add karein
-• <code>/folders</code> - Sare anime folders dekhein
-• <code>/status</code> - Bot aur server status
+• <code>/files</code> - Apne phone ke Anime aur Movie folders ke sare files dekhein
+• <code>/status</code> - Phone storage & bot status
+• <code>/publish &lt;Anime&gt; &lt;Ep&gt;</code> - APEX Website pe live karein
+• <code>/movie &lt;Title&gt;</code> - Standalone movie website pe add karein
     `);
+  }
+
+  /**
+   * Helper to check if a document is a video
+   */
+  isVideoDocument(doc) {
+    if (!doc) return false;
+    if (doc.mime_type && doc.mime_type.startsWith('video/')) return true;
+    if (doc.file_name && /\.(mp4|mkv|webm|avi|mov|flv|wmv|m4v|ts)$/i.test(doc.file_name)) return true;
+    return false;
   }
 
   /**
@@ -220,87 +273,368 @@ Kisi bhi video ya episode ka link bhejo (jaise: <code>https://t.me/channel/123</
    */
   async handleStartCommand(chatId) {
     const welcome = `
-⚡ <b>Welcome to APEX Anime Stream Bot!</b> 🎬
+⚡ <b>APEX AI Anime & Movie Organizer Bot</b> 🎬
 
-Main aapke Telegram videos aur links se <b>Direct High-Speed Streaming Links</b> generate karta hu aur 1-click me aapki APEX Anime Website pe publish kar sakta hu!
+Mujhe koi bhi Anime ya Movie ki video forward karein. Mera AI apne aap:
+1️⃣ <b>Detect karega</b> ki ye Anime hai ya Movie
+2️⃣ <b>Auto-Rename</b> karega: (e.g. <code>Naruto Ep 1.mp4</code> ya <code>Jawan (2023).mp4</code>)
+3️⃣ <b>Direct Phone Folders me save karega:</b>
+   • 🎌 Anime Videos ➔ <code>/storage/emulated/0/ALL ANIMA VIDIOS/</code>
+   • 🎬 Movies ➔ <code>/storage/emulated/0/ALL MOVIES FOLDERS/</code>
 
 ✨ <b>Features:</b>
-1️⃣ <b>Direct Link Generator:</b>
-Koi bhi Telegram channel link bhejo (e.g. <code>https://t.me/RAZXCHEATS/141</code>) ya direct video URL -> Direct Stream Link, Embed Link & APEX Web Player Link turant milega!
-
-2️⃣ <b>1-Click Publish to Website:</b>
-Link ke sath ya video forward karke likhein:
-<code>/publish Naruto 1</code>
-Wo turant website par live ho jayega aur "Naruto" folder me save ho jayega!
-
-3️⃣ <b>Movies Support:</b>
-Full length movie ke liye:
-<code>/movie Your Name</code>
-
-4️⃣ <b>Hindi Dub Support:</b>
-Hindi dub anime ke liye sath me <code>hi</code> likhein:
-<code>/publish Naruto 1 hi</code>
-
-5️⃣ <b>Folder System:</b>
-Check karein ki kis anime me kitne episodes hain:
-<code>/folders</code>
+• <b>Zero manual work:</b> Bas video forward karein, AI baki sab sambhal lega!
+• <b>Caption optional:</b> Caption me <code>Naruto ep 1</code> likh sakte hain ya blank bhi chhod sakte hain (file name se AI khud samjh jayega).
+• <b>Commands:</b>
+   • <code>/files</code> - Phone ke downloaded videos ki list
+   • <code>/status</code> - Server & Storage status
+   • <code>/publish &lt;Anime&gt; &lt;Ep&gt; [Link]</code> - Website pe direct publish
     `;
     await this.sendMessage(chatId, welcome);
   }
 
   /**
-   * Handle URL message (e.g. https://t.me/channel/141)
-   */
-  async handleUrlMessage(chatId, rawUrl) {
-    try {
-      const resolved = await telegramResolver.resolveTelegram(rawUrl);
-
-      if (resolved.directVideoUrl && !/\.(jpg|jpeg|png|webp|gif)$/i.test(resolved.directVideoUrl)) {
-        // Save for quick publish
-        this.userLastMedia.set(chatId, {
-          url: resolved.directVideoUrl,
-          type: 'mp4',
-          originalUrl: rawUrl
-        });
-        // Send pure direct video stream URL
-        return await this.sendMessage(chatId, resolved.directVideoUrl);
-      }
-
-      // If no direct video stream in post (Telegram document or app-only stream)
-      await this.sendMessage(chatId, `⚠️ Is Telegram channel post me direct web video stream nahi hai (ye file Telegram app me locked hai).
-
-💡 Video website pe direct play karne ke 2 sabse aasan tareeqe:
-1️⃣ Admin Panel me <b>"Upload from Phone"</b> button dabayein aur apne phone se direct video select karein! (Kisi bot ki zaroorat nahi, 100% direct play hoga!).
-2️⃣ Ya video ko <b>Catbox.moe</b> par upload karein aur uska direct .mp4 link yahan daal dein!`);
-
-    } catch (err) {
-      await this.sendMessage(chatId, `❌ Error: ${err.message}`);
-    }
-  }
-
-  /**
-   * Handle Video or Document upload/forward
+   * Main Handler: AI Media Upload & Auto-Save to Phone Storage
    */
   async handleMediaUpload(chatId, msg) {
     const media = msg.video || msg.document;
     if (!media) return;
 
     const fileId = media.file_id;
-    try {
-      const fileInfo = await this.apiRequest('getFile', { file_id: fileId });
-      const filePath = fileInfo.file_path;
-      const token = this.token || this.getToken();
-      const directCdnUrl = `https://api.telegram.org/file/bot${token}/${filePath}`;
+    const rawFileName = media.file_name || (msg.video ? 'video.mp4' : 'file.mp4');
+    const caption = msg.caption || '';
+    const fileSize = media.file_size || 0;
 
-      this.userLastMedia.set(chatId, {
-        url: directCdnUrl,
-        type: 'mp4'
+    // Send Initial AI Analyzing Status
+    const statusMsg = await this.sendMessage(chatId, `
+🤖 <b>APEX AI Media Inspector</b>
+🔍 <i>Analyzing video, title and episode details...</i>
+    `);
+    const statusMsgId = statusMsg?.message_id;
+
+    try {
+      // Step 1: AI Classification & Smart Renaming
+      const analysis = await aiClassifierService.classify({
+        filename: rawFileName,
+        caption,
+        fileSize
       });
 
-      // Send ONLY 1 direct link and nothing else
-      await this.sendMessage(chatId, directCdnUrl);
+      const readableSize = telegramMediaDownloader.formatBytes(fileSize);
+
+      // Inform user about AI detection result
+      const aiSummary = `
+🤖 <b>APEX AI Auto-Detection Result:</b>
+
+📂 <b>Classification:</b> ${analysis.categoryLabel}
+🏷️ <b>Detected Title:</b> <b>${analysis.title}</b>
+${analysis.isAnime ? `📺 <b>Episode Number:</b> <b>Ep ${analysis.episodeNumber}</b>\n` : ''}${analysis.year ? `📅 <b>Year:</b> ${analysis.year}\n` : ''}🔊 <b>Audio:</b> ${analysis.audio.label}
+📝 <b>New Name:</b> <code>${analysis.targetFileName}</code>
+📁 <b>Target Folder:</b> <code>${analysis.targetDir}/</code>
+📦 <b>File Size:</b> ${readableSize}
+
+⏳ <i>Saving video directly to your phone storage...</i>
+      `;
+
+      if (statusMsgId) {
+        await this.editMessageText(chatId, statusMsgId, aiSummary);
+      } else {
+        await this.sendMessage(chatId, aiSummary);
+      }
+
+      // Step 2: Ensure destination directory exists
+      const dirCheck = telegramMediaDownloader.ensureDirectory(analysis.targetDir);
+      if (!dirCheck.success) {
+        return this.sendMessage(chatId, `
+⚠️ <b>Storage Access Alert:</b>
+Folder create nahi ho saka: <code>${analysis.targetDir}</code>
+
+💡 <b>Fix:</b> Apne Termux me ye command run karein aur 'Allow' karein:
+<code>termux-setup-storage</code>
+        `);
+      }
+
+      const finalPath = analysis.targetPath;
+
+      // Step 3: Check Download Method (Bot API vs GramJS MTProto)
+      const LIMIT_20MB = 20 * 1024 * 1024;
+
+      if (fileSize <= LIMIT_20MB) {
+        // Standard Bot API Download
+        const fileInfo = await this.apiRequest('getFile', { file_id: fileId });
+        const filePath = fileInfo.file_path;
+        const token = this.token || this.getToken();
+        const cdnUrl = `https://api.telegram.org/file/bot${token}/${filePath}`;
+
+        // Progress throttled updates
+        const onProgress = async (prog) => {
+          if (statusMsgId && prog.percent % 25 === 0) {
+            await this.editMessageText(chatId, statusMsgId, `
+⏳ <b>Downloading & Renaming:</b>
+📝 <code>${analysis.targetFileName}</code>
+📊 <b>Progress:</b> ${prog.percent}% (${prog.downloadedStr} / ${prog.totalStr})
+📁 <b>Saving to:</b> <code>${analysis.targetDir}/</code>
+            `);
+          }
+        };
+
+        await telegramMediaDownloader.downloadHttpStream(cdnUrl, finalPath, onProgress);
+
+      } else {
+        // File > 20MB
+        if (telegramMediaDownloader.hasGramJs()) {
+          // Download via GramJS MTProto
+          const token = this.token || this.getToken();
+          await telegramMediaDownloader.downloadViaGramJs(token, media, finalPath, async (prog) => {
+            if (statusMsgId && prog.percent % 25 === 0) {
+              await this.editMessageText(chatId, statusMsgId, `
+⏳ <b>Downloading Large Video (2GB Stream):</b>
+📝 <code>${analysis.targetFileName}</code>
+📊 <b>Progress:</b> ${prog.percent}% (${prog.downloadedStr} / ${prog.totalStr})
+📁 <b>Saving to:</b> <code>${analysis.targetDir}/</code>
+              `);
+            }
+          });
+        } else {
+          // GramJS not yet installed: inform user clearly
+          return this.sendMessage(chatId, `
+⚠️ <b>File Size: ${readableSize}</b>
+
+Ye video 20MB se badi hai. Telegram Bot API 20MB se badi file direct download nahi hone deta bina MTProto client ke.
+
+🚀 <b>2GB Badi Videos Direct Phone me Save Karne Ke Liye:</b>
+Termux me bas ye 1 command chalayein:
+<code>npm install telegram</code>
+
+<i>Iske baad 2GB tak ki koi bhi Episode ya Movie direct <code>${analysis.targetDir}</code> me save ho jayegi!</i>
+          `);
+        }
+      }
+
+      // Step 4: Download Complete Confirmation
+      const successText = `
+🎉 <b>Video Successfully Saved to Phone!</b>
+
+📁 <b>File Location:</b>
+<code>${finalPath}</code>
+
+📝 <b>Saved Name:</b> <code>${analysis.targetFileName}</code>
+📦 <b>File Size:</b> ${readableSize}
+🍿 <b>Status:</b> Aapke phone gallery / MX Player / VLC me ready hai!
+
+💡 <i>Folder check karne ke liye:</i> <code>/files</code>
+      `;
+
+      if (statusMsgId) {
+        await this.editMessageText(chatId, statusMsgId, successText);
+      } else {
+        await this.sendMessage(chatId, successText);
+      }
+
+      // Step 5: Automatically sync with APEX Website database
+      await this.syncToApexDatabase(analysis, finalPath).catch(err => {
+        console.warn('[TelegramBot] Auto-sync to APEX db skipped:', err.message);
+      });
+
     } catch (err) {
-      await this.sendMessage(chatId, `⚠️ Ye video 20MB se badi hai. Is video ko apne channel me post karke uska link bhejein, direct stream link mil jayega!`);
+      console.error('[TelegramBot Media Error]:', err);
+      const errMsg = `❌ <b>Download Error:</b> ${err.message}`;
+      if (statusMsgId) {
+        await this.editMessageText(chatId, statusMsgId, errMsg);
+      } else {
+        await this.sendMessage(chatId, errMsg);
+      }
+    }
+  }
+
+  /**
+   * Auto-sync local saved video to APEX website database
+   */
+  async syncToApexDatabase(analysis, filePath) {
+    const isMovie = analysis.isMovie;
+    const title = analysis.title;
+    const epNum = analysis.episodeNumber || 1;
+
+    let anime = db.data.anime.find(a => a.title.toLowerCase() === title.toLowerCase());
+    if (!anime) {
+      anime = db.createAnime({
+        title,
+        japanese_title: '',
+        synopsis: isMovie ? `Watch ${title} full movie on APEX.` : `Watch ${title} on APEX.`,
+        poster_url: 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600',
+        banner_url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1920',
+        rating: 8.8,
+        status: isMovie ? 'Completed' : 'Airing',
+        type: isMovie ? 'Movie' : 'TV',
+        season: 'Fall',
+        year: analysis.year || new Date().getFullYear(),
+        studio: 'APEX Local Library',
+        genres: isMovie ? ['Movie', 'Cinema'] : ['Action', 'Anime'],
+        featured: false
+      });
+    }
+
+    const localSource = {
+      server: 'Device Local Storage',
+      type: 'mp4',
+      url: filePath,
+      quality: '1080p',
+      audio: analysis.audio.code,
+      audioLabel: analysis.audio.label
+    };
+
+    let existingEpisodes = db.getEpisodesByAnimeId(anime.id);
+    let episode = existingEpisodes.find(e => e.episode_number === epNum);
+
+    if (episode) {
+      const sources = [localSource, ...(episode.sources || []).filter(s => s.server !== localSource.server)];
+      db.updateEpisode(episode.id, { sources });
+    } else {
+      db.createEpisode({
+        anime_id: anime.id,
+        episode_number: epNum,
+        title: isMovie ? `${title} (Full Movie)` : `Episode ${epNum}`,
+        thumbnail_url: anime.banner_url || anime.poster_url,
+        video_url: filePath,
+        sources: [localSource],
+        published: true
+      });
+    }
+  }
+
+  /**
+   * Handle /files command to list saved Anime and Movies on device
+   */
+  async handleFilesCommand(chatId) {
+    const animeDir = aiClassifierService.ANIME_BASE_DIR;
+    const movieDir = aiClassifierService.MOVIE_BASE_DIR;
+
+    let animeFiles = [];
+    let movieFiles = [];
+
+    try {
+      if (fs.existsSync(animeDir)) {
+        animeFiles = fs.readdirSync(animeDir).filter(f => !f.startsWith('.'));
+      }
+      if (fs.existsSync(movieDir)) {
+        movieFiles = fs.readdirSync(movieDir).filter(f => !f.startsWith('.'));
+      }
+    } catch (e) {
+      return this.sendMessage(chatId, `⚠️ Directory read error: ${e.message}`);
+    }
+
+    const animeListStr = animeFiles.length > 0
+      ? animeFiles.slice(0, 15).map((f, i) => `${i + 1}. <code>${f}</code>`).join('\n')
+      : '<i>Abhi koi anime video save nahi hai.</i>';
+
+    const movieListStr = movieFiles.length > 0
+      ? movieFiles.slice(0, 10).map((f, i) => `${i + 1}. <code>${f}</code>`).join('\n')
+      : '<i>Abhi koi movie save nahi hai.</i>';
+
+    const text = `
+📂 <b>Phone Storage Video Files:</b>
+
+🎌 <b>Anime Videos (${animeFiles.length} Total):</b>
+📁 <code>${animeDir}/</code>
+${animeListStr}
+${animeFiles.length > 15 ? `<i>...aur ${animeFiles.length - 15} aur files</i>` : ''}
+
+───────────────
+🎬 <b>Movies (${movieFiles.length} Total):</b>
+📁 <code>${movieDir}/</code>
+${movieListStr}
+${movieFiles.length > 10 ? `<i>...aur ${movieFiles.length - 10} aur files</i>` : ''}
+    `;
+
+    await this.sendMessage(chatId, text);
+  }
+
+  /**
+   * Handle /download or /save <URL> [Title] [Ep]
+   */
+  async handleDownloadUrlCommand(chatId, text, msg) {
+    const parts = text.split(/\s+/).slice(1);
+    let targetUrl = null;
+    let customTitle = '';
+    let customEp = null;
+
+    // Check if replying to a message with URL
+    if (msg.reply_to_message) {
+      const match = (msg.reply_to_message.text || msg.reply_to_message.caption || '').match(/(https?:\/\/[^\s]+)/i);
+      if (match) targetUrl = match[1];
+    }
+
+    for (const part of parts) {
+      if (part.startsWith('http://') || part.startsWith('https://')) {
+        targetUrl = part;
+      } else if (/^\d+$/.test(part)) {
+        customEp = parseInt(part, 10);
+      } else {
+        customTitle += (customTitle ? ' ' : '') + part;
+      }
+    }
+
+    if (!targetUrl) {
+      return this.sendMessage(chatId, `
+❌ <b>Usage:</b> <code>/download &lt;Video URL&gt; [Title] [Ep]</code>
+<i>Example:</i> <code>/download https://example.com/video.mp4 Naruto 1</code>
+<i>Or reply to a message containing a link with:</i> <code>/download Naruto 1</code>
+      `);
+    }
+
+    await this.sendMessage(chatId, `⏳ <i>Resolving stream link and downloading to phone...</i>`);
+
+    try {
+      const tgInfo = await telegramResolver.resolveTelegram(targetUrl);
+      const downloadUrl = tgInfo.directVideoUrl || targetUrl;
+
+      const analysis = await aiClassifierService.classify({
+        filename: customTitle || path.basename(new URL(downloadUrl).pathname) || 'video.mp4',
+        caption: customEp ? `Ep ${customEp}` : '',
+        fileSize: 0
+      });
+
+      if (customTitle) {
+        analysis.title = customTitle;
+        if (analysis.isAnime) {
+          analysis.targetFileName = `${customTitle} Ep ${customEp || 1}.mp4`;
+        } else {
+          analysis.targetFileName = `${customTitle}.mp4`;
+        }
+        analysis.targetPath = `${analysis.targetDir}/${analysis.targetFileName}`;
+      }
+
+      await telegramMediaDownloader.downloadHttpStream(downloadUrl, analysis.targetPath);
+
+      await this.sendMessage(chatId, `
+🎉 <b>URL Downloaded Successfully to Phone!</b>
+📁 <b>Path:</b> <code>${analysis.targetPath}</code>
+      `);
+    } catch (err) {
+      await this.sendMessage(chatId, `❌ Download failed: ${err.message}`);
+    }
+  }
+
+  /**
+   * Handle URL message
+   */
+  async handleUrlMessage(chatId, rawUrl) {
+    try {
+      const resolved = await telegramResolver.resolveTelegram(rawUrl);
+
+      if (resolved.directVideoUrl && !/\.(jpg|jpeg|png|webp|gif)$/i.test(resolved.directVideoUrl)) {
+        this.userLastMedia.set(chatId, {
+          url: resolved.directVideoUrl,
+          type: 'mp4',
+          originalUrl: rawUrl
+        });
+        return await this.sendMessage(chatId, resolved.directVideoUrl);
+      }
+
+      await this.sendMessage(chatId, `⚠️ Is Telegram channel post me direct web video stream nahi hai.
+💡 Phone se direct video bot me forward karein ya send karein, AI use turant rename karke aapke phone folder me save kar dega!`);
+    } catch (err) {
+      await this.sendMessage(chatId, `❌ Error: ${err.message}`);
     }
   }
 
@@ -313,17 +647,14 @@ Check karein ki kis anime me kitne episodes hain:
       return this.sendMessage(chatId, `
 ❌ <b>Usage:</b> <code>/publish &lt;Anime Name&gt; &lt;Episode Number&gt; [Audio: hi/ja/en] [URL]</code>
 <i>Example:</i> <code>/publish Naruto 1 hi https://t.me/RAZXCHEATS/141</code>
-<i>Or send a video/link first, then reply:</i> <code>/publish Naruto 1</code>
       `);
     }
 
-    // Check if URL is given in command or in reply
     let streamUrl = null;
     let audio = 'ja';
     let epNum = 1;
-    let animeTitle = '';
+    const remainingParts = [];
 
-    // Check if replying to a message with a link or if we have last sent media
     const replyMsg = msg.reply_to_message;
     if (replyMsg) {
       const match = (replyMsg.text || replyMsg.caption || '').match(/(https?:\/\/[^\s]+)/i);
@@ -334,8 +665,6 @@ Check karein ki kis anime me kitne episodes hain:
       streamUrl = this.userLastMedia.get(chatId).url;
     }
 
-    // Parse arguments: e.g. /publish Naruto Shippuden 2 hi https://t.me/...
-    const remainingParts = [];
     for (const part of parts) {
       if (part.startsWith('http://') || part.startsWith('https://')) {
         streamUrl = part;
@@ -348,14 +677,13 @@ Check karein ki kis anime me kitne episodes hain:
       }
     }
 
-    animeTitle = remainingParts.join(' ').trim();
-
+    const animeTitle = remainingParts.join(' ').trim();
     if (!animeTitle) {
       return this.sendMessage(chatId, `❌ Please specify the Anime title! Example: <code>/publish Naruto 1</code>`);
     }
 
     if (!streamUrl) {
-      return this.sendMessage(chatId, `❌ No stream URL found! Please send a Telegram video link first or include it: <code>/publish ${animeTitle} ${epNum} https://t.me/...</code>`);
+      return this.sendMessage(chatId, `❌ No stream URL found! Please send a Telegram video link first or include it in command.`);
     }
 
     await this.sendMessage(chatId, `⏳ <i>Publishing "${animeTitle}" Episode ${epNum} to APEX Platform...</i>`);
@@ -378,12 +706,9 @@ Check karein ki kis anime me kitne episodes hain:
 📁 <b>Folder:</b> ${result.anime.title}
 📺 <b>Episode:</b> Episode ${result.episode.episode_number}
 🔊 <b>Audio:</b> ${audio === 'hi' ? '🇮🇳 Hindi Dub' : (audio === 'en' ? '🇬🇧 English Dub' : '🇯🇵 Japanese')}
-📊 <b>Total Episodes in Folder:</b> ${result.anime.episodes_count || 1}
 
 🌐 <b>Live Website Link:</b>
 <a href="${liveUrl}">${liveUrl}</a>
-
-<i>Ab ye episode direct aapki website ke homepage aur anime detail page par live hai!</i>
       `);
     } catch (err) {
       await this.sendMessage(chatId, `❌ Failed to publish: ${err.message}`);
@@ -398,7 +723,6 @@ Check karein ki kis anime me kitne episodes hain:
     if (parts.length === 0) {
       return this.sendMessage(chatId, `
 ❌ <b>Usage:</b> <code>/movie &lt;Movie Title&gt; [Audio: hi/ja/en] [URL]</code>
-<i>Example:</i> <code>/movie Your Name hi https://t.me/RAZXCHEATS/141</code>
       `);
     }
 
@@ -455,13 +779,7 @@ Check karein ki kis anime me kitne episodes hain:
 🎬 <b>Movie Published Successfully to Main Website!</b>
 
 🎥 <b>Movie:</b> ${result.anime.title}
-🔊 <b>Audio:</b> ${audio === 'hi' ? '🇮🇳 Hindi Dub' : (audio === 'en' ? '🇬🇧 English Dub' : '🇯🇵 Japanese')}
-🏷️ <b>Badge:</b> 🎬 MOVIE
-
-🌐 <b>Live Movie Page:</b>
-<a href="${liveUrl}">${liveUrl}</a>
-
-<i>Ye movie direct aapki website ke Movies tab aur Homepage par live ho gayi hai!</i>
+🌐 <b>Live Movie Page:</b> <a href="${liveUrl}">${liveUrl}</a>
       `);
     } catch (err) {
       await this.sendMessage(chatId, `❌ Failed to publish movie: ${err.message}`);
@@ -478,16 +796,14 @@ Check karein ki kis anime me kitne episodes hain:
     const audio = data.audio || 'ja';
     const audioLabel = audio === 'hi' ? 'Hindi Dub' : (audio === 'en' ? 'English Dub' : 'Japanese (Original)');
 
-    // Call AI enrichment in background to get official banner, poster, synopsis & episode title
     const aiData = await aiEnricherService.enrich({ title, episodeNumber: epNum, isMovie }).catch(() => null);
 
-    // Find or create anime
     let anime = db.data.anime.find(a => a.title.toLowerCase() === title.toLowerCase());
     if (!anime) {
       anime = db.createAnime({
         title: (aiData && aiData.title) || title,
         japanese_title: (aiData && aiData.japanese_title) || '',
-        synopsis: (aiData && aiData.synopsis) || (isMovie ? `Watch ${title} full movie online in HD on APEX.` : `Watch ${title} online in HD on APEX.`),
+        synopsis: (aiData && aiData.synopsis) || (isMovie ? `Watch ${title} full movie online on APEX.` : `Watch ${title} online on APEX.`),
         poster_url: (aiData && aiData.poster_url) || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=600',
         banner_url: (aiData && aiData.banner_url) || 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1920',
         rating: (aiData && aiData.rating) || 8.8,
@@ -501,7 +817,6 @@ Check karein ki kis anime me kitne episodes hain:
       });
     }
 
-    // Resolve URL
     let finalUrl = data.stream_url.trim();
     let sourceType = 'mp4';
     let embedUrl = null;
@@ -568,7 +883,7 @@ Check karein ki kis anime me kitne episodes hain:
   async handleFoldersCommand(chatId) {
     const list = db.data.anime;
     if (!list || list.length === 0) {
-      return this.sendMessage(chatId, `📁 <b>No Anime Folders Yet</b>\nAapka catalog abhi empty hai. <code>/publish Naruto 1 &lt;link&gt;</code> se pehla folder banayein!`);
+      return this.sendMessage(chatId, `📁 <b>No Anime Folders Yet</b>\nAapka catalog abhi empty hai.`);
     }
 
     const lines = list.map((a, i) => {
@@ -581,10 +896,6 @@ Check karein ki kis anime me kitne episodes hain:
 📁 <b>APEX Anime Folders (${list.length} Total):</b>
 
 ${lines.join('\n')}
-
-───────────────
-<i>Kisi bhi folder me episode add karne ke liye:</i>
-<code>/publish &lt;Folder Name&gt; &lt;Ep Number&gt;</code>
     `;
     await this.sendMessage(chatId, text);
   }
@@ -597,21 +908,28 @@ ${lines.join('\n')}
     const epCount = db.data.episodes.length;
     const uptimeMinutes = Math.floor(process.uptime() / 60);
 
+    const animeDir = aiClassifierService.ANIME_BASE_DIR;
+    const movieDir = aiClassifierService.MOVIE_BASE_DIR;
+    const animeExists = fs.existsSync(animeDir);
+    const movieExists = fs.existsSync(movieDir);
+
     const text = `
-🤖 <b>APEX Bot & Server Status</b>
+🤖 <b>APEX Bot & Storage Status</b>
 
 • <b>Bot Username:</b> @${this.botInfo?.username || 'Unknown'}
 • <b>Bot Status:</b> 🟢 Active & Polling
 • <b>Server Uptime:</b> ${uptimeMinutes} minutes
 • <b>Total Anime Folders:</b> ${animeCount}
 • <b>Total Episodes Live:</b> ${epCount}
-• <b>Platform Version:</b> APEX v1.0.0
+
+📂 <b>Phone Target Folders:</b>
+• 🎌 <b>Anime:</b> <code>${animeDir}</code> (${animeExists ? '🟢 Ready' : '🟡 Creating'})
+• 🎬 <b>Movies:</b> <code>${movieDir}</code> (${movieExists ? '🟢 Ready' : '🟡 Creating'})
     `;
     await this.sendMessage(chatId, text);
   }
 }
 
-// Singleton instance
 const telegramBotService = new TelegramBotService();
 
 module.exports = telegramBotService;
