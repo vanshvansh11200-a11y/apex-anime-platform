@@ -34,7 +34,7 @@
         "Adventure",
         "Fantasy"
       ],
-      "episodes_count": 2,
+      "episodes_count": 3,
       "has_sub": true,
       "has_dub": true,
       "has_hindi_dub": true,
@@ -151,6 +151,29 @@
       "outro_end": 1440,
       "published": true,
       "created_at": "2026-11-07T16:03:02.250Z"
+    },
+    {
+      "id": "ep_1a1b8b2ec19_897786",
+      "anime_id": "anm_mw6ijhlc_1padr1",
+      "season_number": 1,
+      "episode_number": 3,
+      "title": "Episode 3",
+      "thumbnail_url": "https://s4.anilist.co/file/anilistcdn/media/anime/banner/20-HHxhPj5JD13a.jpg",
+      "duration": "24:00",
+      "duration_seconds": 1440,
+      "video_url": "/videos/Naruto%20Ep%203.mp4",
+      "sources": [
+        {
+          "server": "Phone Storage (\u26a1 Ultra Fast)",
+          "type": "mp4",
+          "url": "/videos/Naruto%20Ep%203.mp4",
+          "quality": "1080p",
+          "audio": "hi",
+          "audioLabel": "Hindi Dub"
+        }
+      ],
+      "published": true,
+      "created_at": "2026-11-08T01:08:16.000Z"
     }
   ],
   "watchlist": [],
