@@ -1,0 +1,193 @@
+{
+  "users": [
+    {
+      "id": "usr_admin_apex",
+      "username": "ApexAdmin",
+      "email": "admin@apex.stream",
+      "password_hash": "$2a$10$xGtJduL/y1XGF6f1Ql8NUOJ14fHyHuyR8PrBkdEKzOWhgU1OCEW3O",
+      "role": "admin",
+      "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=256&h=256&q=80",
+      "bio": "APEX Lead Administrator & Content Curator",
+      "status": "active",
+      "created_at": "2026-11-07T13:27:28.479Z"
+    }
+  ],
+  "anime": [
+    {
+      "id": "anm_mw6ijhlc_1padr1",
+      "slug": "naruto",
+      "anilist_id": 20,
+      "title": "Naruto",
+      "japanese_title": "NARUTO -\u30ca\u30eb\u30c8-",
+      "synopsis": "Moments prior to Naruto Uzumaki's birth, a huge demon known as the Kyuubi, the Nine-Tailed Fox, attacked Konohagakure, the Hidden Leaf Village, and wreaked havoc. To put an end to the rampage, the leader of the village, the Fourth Hokage, sacrificed his life and sealed the monstrous beast inside the newborn Naruto.",
+      "poster_url": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20-YJvLbgJQPCoB.png",
+      "banner_url": "https://s4.anilist.co/file/anilistcdn/media/anime/banner/20-HHxhPj5JD13a.jpg",
+      "trailer_url": "",
+      "rating": 8.8,
+      "status": "Completed",
+      "type": "TV",
+      "season": "Fall",
+      "year": 2002,
+      "studio": "Studio Pierrot",
+      "genres": [
+        "Action",
+        "Adventure",
+        "Fantasy"
+      ],
+      "episodes_count": 2,
+      "has_sub": true,
+      "has_dub": true,
+      "has_hindi_dub": true,
+      "views_count": 7,
+      "featured": true,
+      "published": true,
+      "created_at": "2026-11-07T14:43:04.272Z"
+    }
+  ],
+  "episodes": [
+    {
+      "id": "ep_mw6ijhlj_pxv5dv",
+      "anime_id": "anm_mw6ijhlc_1padr1",
+      "episode_number": 1,
+      "title": "Episode 1",
+      "thumbnail_url": "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=1920",
+      "duration": "24:00",
+      "duration_seconds": 1440,
+      "video_url": "/videos/Naruto%20Ep%201.mp4",
+      "sources": [
+        {
+          "server": "Phone Storage (\u26a1 Ultra Fast)",
+          "type": "mp4",
+          "url": "/videos/Naruto%20Ep%201.mp4",
+          "quality": "1080p",
+          "audio": "hi",
+          "audioLabel": "Hindi Dub"
+        },
+        {
+          "server": "Telegram Fast Server",
+          "type": "mp4",
+          "url": "/videos/46907.mp4",
+          "embedUrl": null,
+          "quality": "1080p",
+          "audio": "hi",
+          "audioLabel": "Hindi Dub"
+        }
+      ],
+      "subtitles": [
+        {
+          "label": "English",
+          "lang": "en",
+          "src": ""
+        },
+        {
+          "label": "Espa\u00f1ol",
+          "lang": "es",
+          "src": ""
+        },
+        {
+          "label": "Hindi",
+          "lang": "hi",
+          "src": ""
+        },
+        {
+          "label": "Fran\u00e7ais",
+          "lang": "fr",
+          "src": ""
+        }
+      ],
+      "intro_start": 85,
+      "intro_end": 175,
+      "outro_start": 1350,
+      "outro_end": 1440,
+      "published": true,
+      "created_at": "2026-11-07T14:43:04.279Z",
+      "season_number": 1
+    },
+    {
+      "id": "ep_mw6lebqh_5r6hxi",
+      "anime_id": "anm_mw6ijhlc_1padr1",
+      "episode_number": 2,
+      "title": "Episode 2",
+      "thumbnail_url": "https://s4.anilist.co/file/anilistcdn/media/anime/banner/20-HHxhPj5JD13a.jpg",
+      "duration": "24:00",
+      "duration_seconds": 1440,
+      "video_url": "/videos/46925.mkv",
+      "sources": [
+        {
+          "server": "Telegram Fast Server",
+          "type": "mp4",
+          "url": "/videos/46925.mkv",
+          "embedUrl": null,
+          "quality": "1080p",
+          "audio": "hi",
+          "audioLabel": "Hindi Dub"
+        }
+      ],
+      "subtitles": [
+        {
+          "label": "English",
+          "lang": "en",
+          "src": ""
+        },
+        {
+          "label": "Espa\u00f1ol",
+          "lang": "es",
+          "src": ""
+        },
+        {
+          "label": "Hindi",
+          "lang": "hi",
+          "src": ""
+        },
+        {
+          "label": "Fran\u00e7ais",
+          "lang": "fr",
+          "src": ""
+        }
+      ],
+      "intro_start": 85,
+      "intro_end": 175,
+      "outro_start": 1350,
+      "outro_end": 1440,
+      "published": true,
+      "created_at": "2026-11-07T16:03:02.250Z"
+    }
+  ],
+  "watchlist": [],
+  "watch_history": [
+    {
+      "id": "his_mw6ik4gv_nn45ot",
+      "user_id": "usr_admin_apex",
+      "anime_id": "anm_mw6ijhlc_1padr1",
+      "episode_id": "ep_mw6ijhlj_pxv5dv",
+      "progress_seconds": 194,
+      "total_seconds": 1375,
+      "completed": false,
+      "created_at": "2026-11-07T14:43:33.919Z",
+      "updated_at": "2026-11-07T16:02:31.323Z"
+    },
+    {
+      "id": "his_mw6lhdwe_dsr3kr",
+      "user_id": "usr_admin_apex",
+      "anime_id": "anm_mw6ijhlc_1padr1",
+      "episode_id": "ep_mw6lebqh_5r6hxi",
+      "progress_seconds": 323,
+      "total_seconds": 1410,
+      "completed": false,
+      "created_at": "2026-11-07T16:05:25.022Z",
+      "updated_at": "2026-11-07T16:07:39.990Z"
+    }
+  ],
+  "comments": [],
+  "ratings": [],
+  "settings": {
+    "siteName": "APEX",
+    "enableAniListSync": true,
+    "defaultAudio": "ja",
+    "allowPublicRegistrations": true,
+    "telegramBotToken": "8237978460:AAFKwzIWze-JIXZJJhsFYncOIQVSPLCoYME"
+  },
+  "stats": {
+    "total_views": 9
+  }
+}
